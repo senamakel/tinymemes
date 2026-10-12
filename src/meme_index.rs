@@ -34,57 +34,16 @@ use crate::region::{CatalogMeme, Region, tokens};
 use crate::slang::unix_now;
 use crate::source::Meme;
 
-/// One learned GIF.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct LearnedMeme {
-    /// Region code.
-    pub region: String,
-    /// Short name, unique within the region; Jev's option label.
-    pub title: String,
-    /// When people post it.
-    pub meaning: String,
-    /// Direct media link (small rendition).
-    pub url: String,
-    /// The GIF's page.
-    pub page_url: String,
-    /// Intents it fits.
-    pub intents: Vec<Intent>,
-    /// The host's tags.
-    pub tags: Vec<String>,
-    /// The host's content rating.
-    pub rating: String,
-    /// Jev's verification probability.
-    pub verified: f64,
-    /// Times it went out in a reply.
-    pub used: u32,
-    /// Unix seconds.
-    pub added_at: u64,
-}
+pub use tinymemes_bus::{LearnedMeme, MemeSearchRecord};
 
-impl LearnedMeme {
-    fn to_catalog(&self) -> CatalogMeme {
-        CatalogMeme {
-            title: self.title.clone(),
-            url: self.url.clone(),
-            meaning: self.meaning.clone(),
-            intents: self.intents.clone(),
-        }
+/// Project learned content into the existing offered catalog shape.
+fn to_catalog(meme: &LearnedMeme) -> CatalogMeme {
+    CatalogMeme {
+        title: meme.title.clone(),
+        url: meme.url.clone(),
+        meaning: meme.meaning.clone(),
+        intents: meme.intents.clone(),
     }
-}
-
-/// One research query that ran.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct MemeSearchRecord {
-    /// Region code.
-    pub region: String,
-    /// Intent the search was for.
-    pub intent: Intent,
-    /// The query text.
-    pub query: String,
-    /// Unix seconds.
-    pub at: u64,
-    /// Memes added from it.
-    pub added: usize,
 }
 
 /// What one research step did.
@@ -130,11 +89,7 @@ impl Default for MemeIndexPolicy {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-struct Snapshot {
-    memes: Vec<LearnedMeme>,
-    searches: Vec<MemeSearchRecord>,
-}
+use tinymemes_bus::MemeSnapshot as Snapshot;
 
 /// Learned memes. Share one per process; snapshot it to persist.
 #[derive(Debug, Default)]
@@ -165,6 +120,20 @@ impl MemeIndex {
         })
     }
 
+    /// Restore typed content with the default index policy.
+    /// This does not admit storage or verify research.
+    pub fn from_snapshot(snapshot: tinymemes_bus::MemeSnapshot) -> Self {
+        Self {
+            data: RwLock::new(snapshot),
+            ..Self::default()
+        }
+    }
+
+    /// Copy the current portable content snapshot.
+    pub fn snapshot(&self) -> tinymemes_bus::MemeSnapshot {
+        self.data.read().unwrap().clone()
+    }
+
     /// Serialize to a JSON snapshot.
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(&*self.data.read().unwrap()).unwrap_or_default()
@@ -184,7 +153,7 @@ impl MemeIndex {
         memes
             .into_iter()
             .take(self.policy.offer)
-            .map(LearnedMeme::to_catalog)
+            .map(to_catalog)
             .collect()
     }
 

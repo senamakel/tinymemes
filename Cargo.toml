@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "crates/tinymemes-bus", "crates/tinymemes-module"]
+resolver = "2"
+
 [package]
 name = "tinymemes"
 version = "0.1.0"
@@ -11,6 +15,7 @@ keywords = ["memes", "llm", "openhuman", "jev", "chat"]
 categories = ["text-processing"]
 
 [dependencies]
+tinymemes-bus = { path = "crates/tinymemes-bus", version = "0.1.0" }
 async-trait = "0.1"
 futures = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

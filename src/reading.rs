@@ -194,7 +194,7 @@ pub fn reading_request(
                 instructions: json!(
                     "What is the overall intent of the user across this conversation?"
                 ),
-                criteria: Intent::criteria(),
+                criteria: crate::intent::criteria(),
             }),
         ),
         (
@@ -203,7 +203,7 @@ pub fn reading_request(
                 instructions: json!(
                     "What is the intent of `assistant_reply`, the message about to be sent?"
                 ),
-                criteria: Intent::criteria(),
+                criteria: crate::intent::criteria(),
             }),
         ),
         (

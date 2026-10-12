@@ -12,7 +12,7 @@ use std::sync::{Mutex, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 
 use crate::error::BoxError;
@@ -22,94 +22,13 @@ use crate::reading::Evaluator;
 use crate::region::{Region, SlangTerm, tokens};
 use tinyinference_decisions::{Answer, EvaluationRequest, Noul, Question};
 
-/// A term reported by a researcher, before vetting.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct Discovered {
-    /// The term as written.
-    pub term: String,
-    /// Meaning and when to use it.
-    pub meaning: String,
-    /// Lowest tier the term suits.
-    pub min_tier: Tier,
-    /// Page the term was found on. Must be a page the search actually cited.
-    pub source_url: String,
-    /// Jev's probability that this is genuine, inoffensive regional slang
-    /// with the stated meaning. `None` until verified.
-    #[serde(default)]
-    pub verified: Option<f64>,
-}
+pub use tinymemes_bus::{Discovered, LearnReport, LearnedTerm, Origin, SearchRecord};
 
 /// Finds slang on the web.
 #[async_trait]
 pub trait SlangResearcher: Send + Sync {
     /// Run one research query and return grounded terms.
     async fn research(&self, query: &str) -> Result<Vec<Discovered>, BoxError>;
-}
-
-/// Where a term came from.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Origin {
-    /// Shipped in the region pack.
-    Curated,
-    /// Learned from web research.
-    Web,
-}
-
-/// One indexed term.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct LearnedTerm {
-    /// Region code the term belongs to.
-    pub region: String,
-    /// The term as written.
-    pub term: String,
-    /// Meaning and when to use it.
-    pub meaning: String,
-    /// Lowest tier the term suits.
-    pub min_tier: Tier,
-    /// Intents it was found for. Empty means any intent.
-    pub intents: Vec<Intent>,
-    /// Pages it was found on.
-    pub sources: Vec<String>,
-    /// How many separate searches surfaced it.
-    pub seen: u32,
-    /// How many remixed replies used it.
-    pub used: u32,
-    /// Curated or learned.
-    pub origin: Origin,
-    /// Jev's verification probability for web terms.
-    #[serde(default)]
-    pub verified: Option<f64>,
-}
-
-/// One research query that ran.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct SearchRecord {
-    /// Region code.
-    pub region: String,
-    /// Intent bucket the search was for.
-    pub intent: Intent,
-    /// The query text.
-    pub query: String,
-    /// Unix seconds.
-    pub at: u64,
-    /// Terms accepted from it.
-    pub accepted: usize,
-}
-
-/// What one learning step did.
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct LearnReport {
-    /// The query that ran.
-    pub query: String,
-    /// New terms added.
-    pub added: usize,
-    /// Existing terms corroborated.
-    pub corroborated: usize,
-    /// Terms rejected by the shape, blocklist, or source checks.
-    pub rejected: usize,
-    /// Terms Jev judged not to be genuine, inoffensive regional slang.
-    pub failed_verification: usize,
 }
 
 /// When to research.
@@ -142,11 +61,7 @@ impl Default for IndexPolicy {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-struct Snapshot {
-    terms: Vec<LearnedTerm>,
-    searches: Vec<SearchRecord>,
-}
+use tinymemes_bus::SlangSnapshot as Snapshot;
 
 /// The in-memory slang index. Share one per process; snapshot it to persist.
 #[derive(Debug, Default)]
@@ -172,6 +87,20 @@ impl SlangIndex {
             policy,
             ..Self::default()
         })
+    }
+
+    /// Restore typed content with the default index policy.
+    /// This does not admit storage or verify research.
+    pub fn from_snapshot(snapshot: tinymemes_bus::SlangSnapshot) -> Self {
+        Self {
+            data: RwLock::new(snapshot),
+            ..Self::default()
+        }
+    }
+
+    /// Copy the current portable content snapshot.
+    pub fn snapshot(&self) -> tinymemes_bus::SlangSnapshot {
+        self.data.read().unwrap().clone()
     }
 
     /// Serialize to a JSON snapshot.

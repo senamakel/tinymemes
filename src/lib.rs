@@ -130,7 +130,7 @@ impl std::fmt::Debug for MemeEngine {
 }
 
 impl MemeEngine {
-    /// A standalone engine builder from `TINYMEMES_*` env (see [`env`]):
+    /// A standalone engine builder from `TINYMEMES_*` env (see [`mod@env`]):
     /// OpenRouter for the rewrite model and web research
     /// (`TINYMEMES_OPENROUTER_KEY`, else `OPENROUTER_API_KEY`), Jev from the
     /// configured route, or the LLM fallback when there is none.
@@ -550,3 +550,5 @@ impl MemeEngineBuilder {
         }
     }
 }
+
+pub mod state;
