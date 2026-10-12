@@ -1,0 +1,18 @@
+[package]
+name = "tinymemes-remix-marker-proof"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.88"
+publish = false
+
+[dependencies]
+tinymemes-bus = { path = "../../../crates/tinymemes-bus", features = ["host-callback"] }
+tinybus = { git = "https://github.com/tinyhumansai/tinybus", rev = "1f2557657db97470cd4efb7e1fc2f374f36fdd22", default-features = false, features = ["modules"] }
+tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "7c5596f37e5d5440fbfa3a049a3ca98571885584" }
+tinystoragedrivers-core = { git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "7c5596f37e5d5440fbfa3a049a3ca98571885584" }
+tinystoragedrivers-tinybus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "7c5596f37e5d5440fbfa3a049a3ca98571885584" }
+tinystoragedrivers-sqlite = { git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "7c5596f37e5d5440fbfa3a049a3ca98571885584" }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
+tempfile = "3"
+async-trait = "0.1"
