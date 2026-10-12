@@ -63,3 +63,26 @@ proof disposition.
 
 Baseline log: `target/gates/remix-marker-red.log`. Earlier statements that all
 staged tests were unexecuted describe the pre-run checkpoint only.
+
+## Canonical instance-restriction disposition
+
+The simultaneous instance requirement was replaced by explicit canonical
+refusal and sequential replacement controls. Run 64658 exited 101: duplicate
+load/no-effects and unauthorized/selector controls passed; the eight intended
+Unavailable behavior failures remained. Sequential B setup failed with
+"module initialization failed" after A.shutdown, so it was not authentication
+proof. Run 49264 also exited 101 with the same disposition after normal
+shutdown plus dropping A's ModuleHost while retaining its binding/registration.
+The callback refusal assertion has still not executed for a new B instance.
+
+SQLite fixtures now use an explicit `markers.db` file. Canonical
+SqliteStorage::open chooses File mode by extension and otherwise chooses
+Directory mode with storage.db, so the original directory use was supported,
+not itself a setup failure. The cold reopen test scopes and drops the first
+module and backend, then opens a fresh SqliteStorage from that same file.
+Its cold-reopen assertions remain unexecuted until the marker operation exists.
+
+The current module also requests the stateless ContentState global alias;
+canonical stopped-host cleanup does not detach every retained router alias.
+The replacement initialization failure is under investigation. No alias is
+manually removed, no manifest is spoofed, and no loader override is added.
