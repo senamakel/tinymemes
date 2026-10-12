@@ -60,8 +60,8 @@ or −0.5 for grind or confusion.
 | Tier | Rating | Voice | Memes |
 | --- | --- | --- | --- |
 | Off | 0–2 | untouched | 0 |
-| Light | 3–4 | a few casual words | 0 |
-| Spicy | 5–7 | slangy | 0 |
+| Light | 3–4 | a few casual words | 0 (1 on a strong pick) |
+| Spicy | 5–7 | slangy | 0 (1 on a strong pick) |
 | Unhinged | 8–10 | full group-chat | 1 |
 
 - **Serious gate:** `serious` ≥ 0.35 sets the score to 0, however jokey the user is.
@@ -69,6 +69,8 @@ or −0.5 for grind or confusion.
 - **Meme cooldown:** no meme if one went out in the last 3 replies.
 - **Weak pick:** if Jev's probability for its meme pick (`meme_p`) is under 0.5,
   it counts as `none_fit`. No poorly matched meme goes out.
+- **Strong pick:** if `meme_p` is 0.7 or more, a Light or Spicy reply may carry
+  one meme. The cooldown still applies, and bad news never gets one.
 
 ## 3. Remix
 
@@ -227,7 +229,7 @@ TINYMEMES_JEV=llm OPENROUTER_API_KEY=… cargo run --example remix
 ```
 
 Policy knobs live in `RatingPolicy` (tiers, serious cutoff, cooldown,
-`meme_only_above`, `meme_min_p`), `IndexPolicy` (slang) and `MemeIndexPolicy`
+`meme_only_above`, `meme_min_p`, `strong_pick_p`), `IndexPolicy` (slang) and `MemeIndexPolicy`
 (memes).
 
 ## In OpenHuman

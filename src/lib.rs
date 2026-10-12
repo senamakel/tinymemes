@@ -341,6 +341,10 @@ impl MemeEngine {
             reading.meme_weak = Some(title.clone());
             reading.meme = reading::MemePick::NoneFit;
         }
+        // A confident pick earns one meme even where the tier allows none.
+        if self.policy.strong_pick_allows(&rating, &reading) {
+            rating.max_memes = 1;
+        }
         // Meme cooldown: no meme if one went out in the last few replies.
         let cooldown = self.policy.meme_cooldown_turns;
         if rating.max_memes > 0 && cooldown > 0 {

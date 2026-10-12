@@ -31,6 +31,10 @@ pub struct RatingPolicy {
     /// A meme Jev picks with less probability than this counts as `none_fit`:
     /// no meme is sent, and hosts may research a better one.
     pub meme_min_p: f64,
+    /// A meme Jev picks with at least this probability earns one meme on a
+    /// [`Tier::Light`] or [`Tier::Spicy`] reply, whose tier otherwise allows
+    /// none. Bad news never gets one.
+    pub strong_pick_p: f64,
 }
 
 impl Default for RatingPolicy {
@@ -45,6 +49,7 @@ impl Default for RatingPolicy {
             meme_cooldown_turns: 3,
             meme_only_above: 0.6,
             meme_min_p: 0.5,
+            strong_pick_p: 0.7,
         }
     }
 }
@@ -61,6 +66,20 @@ pub struct Rating {
 }
 
 impl RatingPolicy {
+    /// Whether a confident meme pick lifts a reply whose tier allows no meme
+    /// to one: a [`Tier::Light`] or [`Tier::Spicy`] reply, Jev's pick at or
+    /// above [`RatingPolicy::strong_pick_p`], and no bad news in the chat or
+    /// the reply.
+    #[must_use]
+    pub fn strong_pick_allows(&self, rating: &Rating, reading: &Reading) -> bool {
+        rating.max_memes == 0
+            && matches!(rating.tier, Tier::Light | Tier::Spicy)
+            && matches!(reading.meme, crate::reading::MemePick::Pick(_))
+            && reading.meme_p.is_some_and(|p| p >= self.strong_pick_p)
+            && reading.chat_intent != Intent::BadNews
+            && reading.reply_intent != Intent::BadNews
+    }
+
     /// Rate a reading.
     ///
     /// Frankness carries 60% of the score and playfulness 40%. A serious chat

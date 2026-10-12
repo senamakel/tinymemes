@@ -871,6 +871,86 @@ async fn a_weak_meme_pick_counts_as_none_fit_and_asks_for_research() {
     assert!(out.wants_more_memes());
 }
 
+/// A Light-tier Jev (score 3) that picks `meme` with probability `p`.
+struct LightPick {
+    meme: &'static str,
+    p: f64,
+}
+
+#[async_trait]
+impl Evaluator for LightPick {
+    async fn evaluate(&self, request: &EvaluationRequest) -> Result<EvaluationResponse, BoxError> {
+        let mut resp = jev(0.5, 0.2, 0.0, "grind").evaluate(request).await?;
+        if request.questions.contains_key("meme_best") {
+            resp.answers.insert(
+                "meme_best".into(),
+                Answer::Choice(ChoiceAnswer {
+                    choice: self.meme.into(),
+                    probabilities: BTreeMap::from([(self.meme.to_owned(), self.p)]),
+                    confidence: self.p,
+                }),
+            );
+        }
+        Ok(resp)
+    }
+}
+
+#[tokio::test]
+async fn a_confident_pick_sends_one_meme_on_a_light_reply() {
+    let jev = Arc::new(LightPick {
+        meme: "Moye Moye",
+        p: 0.75,
+    });
+    let engine = MemeEngine::builder(jev, model("arre bhai 😅\n[[meme:1]]")).build();
+    let out = engine
+        .process(
+            &[Turn::user("bhai build phir fail")],
+            "The build failed again.",
+        )
+        .await;
+    let rating = out.rating.unwrap();
+    assert_eq!(rating.tier, Tier::Light);
+    assert_eq!(rating.max_memes, 1);
+    let remix = out.remix.unwrap();
+    assert_eq!(remix.memes.len(), 1);
+    assert_eq!(remix.memes[0].title, "Moye Moye");
+}
+
+#[tokio::test]
+async fn a_middling_pick_sends_no_meme_on_a_light_reply() {
+    let jev = Arc::new(LightPick {
+        meme: "Moye Moye",
+        p: 0.6,
+    });
+    let engine = MemeEngine::builder(jev, model("arre bhai 😅\n[[meme:1]]")).build();
+    let out = engine
+        .process(
+            &[Turn::user("bhai build phir fail")],
+            "The build failed again.",
+        )
+        .await;
+    assert_eq!(out.rating.unwrap().max_memes, 0);
+    assert!(out.remix.unwrap().memes.is_empty());
+    assert!(!out.reply.contains("!["));
+}
+
+#[tokio::test]
+async fn a_confident_pick_still_waits_out_the_meme_cooldown() {
+    let jev = Arc::new(LightPick {
+        meme: "Moye Moye",
+        p: 0.9,
+    });
+    let engine = MemeEngine::builder(jev, model("arre bhai\n[[meme:1]]")).build();
+    let chat = [
+        Turn::user("bhai"),
+        Turn::assistant("lol ![Pakda Gaya](https://media.giphy.com/media/x/200.webp)"),
+        Turn::user("build phir fail"),
+    ];
+    let out = engine.process(&chat, "The build failed again.").await;
+    assert_eq!(out.rating.unwrap().max_memes, 0);
+    assert!(out.remix.unwrap().memes.is_empty());
+}
+
 #[tokio::test]
 async fn reply_that_matches_but_has_no_meme_is_rewritten() {
     let model = spy("arre veer, kya scene hai? 😂");
