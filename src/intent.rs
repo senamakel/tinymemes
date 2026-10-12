@@ -3,6 +3,7 @@
 use serde_json::{Value, json};
 pub use tinymemes_bus::Intent;
 
+/// Build Jev criteria from the stable canonical intent labels.
 pub(crate) fn criteria() -> std::collections::BTreeMap<String, Option<Value>> {
     Intent::ALL
         .into_iter()

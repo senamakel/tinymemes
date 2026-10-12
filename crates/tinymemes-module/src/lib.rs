@@ -4,12 +4,15 @@ use tinymemes_bus::{STATE_INTERFACE, STATE_PATH};
 struct ContentService;
 #[async_trait::async_trait]
 impl tinybus::service::Interface for ContentService {
+    /// Advertise the fixed content contract declared in the module manifest.
     fn name(&self) -> tinybus::InterfaceName {
         STATE_INTERFACE.try_into().unwrap()
     }
+    /// List the entire callable surface; no configuration grants extra methods.
     fn members(&self) -> Vec<tinybus::MemberName> {
         vec!["Apply".try_into().unwrap()]
     }
+    /// Decode positional arguments and invoke owning pure operations with fixed errors.
     async fn call(
         &self,
         member: &tinybus::MemberName,
@@ -24,6 +27,7 @@ impl tinybus::service::Interface for ContentService {
             .map_err(|_| tinybus::Error::failed("invalid content response"))
     }
 }
+/// Register the stateless operation at its declared path and bus name.
 async fn setup(connection: tinybus::Connection) -> tinybus::Result<()> {
     connection
         .serve_at(STATE_PATH.try_into()?, ContentService)

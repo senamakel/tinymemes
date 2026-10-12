@@ -36,6 +36,7 @@ use crate::source::Meme;
 
 pub use tinymemes_bus::{LearnedMeme, MemeSearchRecord};
 
+/// Project learned content into the existing offered catalog shape.
 fn to_catalog(meme: &LearnedMeme) -> CatalogMeme {
     CatalogMeme {
         title: meme.title.clone(),

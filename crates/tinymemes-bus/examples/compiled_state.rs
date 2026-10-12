@@ -2,6 +2,7 @@
 use tinybus::{Connection, broker::Broker, module::ModuleHost, transport::memory::MemoryBus};
 use tinymemes_bus::{ApplyRequest, ContentError, ContentOperation, ContentState, StateClient};
 
+/// Load a real cdylib and exercise its typed content operations and refusals.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args_os()
