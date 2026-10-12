@@ -644,3 +644,110 @@ async fn sqlite_competing_distinct_markers_preserve_union_after_cas_reread() {
     )
     .await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn invalid_native_marker_envelopes_are_refused_without_overwrite() {
+    let malformed = [
+        json!({"business_revision":"0","remixed":[]}),
+        json!({"format_version":2,"business_revision":"0","remixed":[]}),
+        json!({"format_version":1,"business_revision":"01","remixed":[]}),
+        json!({"format_version":1,"business_revision":"-1","remixed":[]}),
+        json!({"format_version":1,"business_revision":"18446744073709551616","remixed":[]}),
+        json!({"format_version":1,"business_revision":0,"remixed":[]}),
+        json!({"format_version":1,"business_revision":"0","remixed":"invalid"}),
+        json!({"format_version":1,"business_revision":"0","remixed":["duplicate","duplicate"]}),
+        json!({"format_version":1,"business_revision":"0","remixed":[],"scope":"forged"}),
+    ];
+    for (index, document) in malformed.into_iter().enumerate() {
+        let backend = MemoryStorage::new();
+        let scoped = backend
+            .for_scope(&Scope::new(format!("invalid-{index}")).unwrap())
+            .unwrap();
+        let version = scoped
+            .documents()
+            .put(
+                COLLECTION,
+                MARKER_DOCUMENT_KEY,
+                document.clone(),
+                Precondition::Absent,
+            )
+            .await
+            .unwrap();
+        let observed = PairedReads::observed(scoped.documents().clone());
+        let fixture = Fixture::new(observed.clone()).await;
+        assert_eq!(
+            fixture
+                .client()
+                .mark_remixed(request("reply"))
+                .await
+                .unwrap(),
+            Err(MarkerFailure::CorruptState)
+        );
+        observed.assert_calls(1, 0);
+        let persisted = scoped
+            .documents()
+            .get(COLLECTION, MARKER_DOCUMENT_KEY)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(persisted.version, version);
+        assert_eq!(persisted.doc, document);
+    }
+}
+async fn revision_exhaustion(backend: Arc<dyn StorageBackend>) {
+    let scoped = backend
+        .for_scope(&Scope::new("revision-limit").unwrap())
+        .unwrap();
+    let original =
+        json!({"format_version":1,"business_revision":u64::MAX.to_string(),"remixed":["existing"]});
+    let version = scoped
+        .documents()
+        .put(
+            COLLECTION,
+            MARKER_DOCUMENT_KEY,
+            original.clone(),
+            Precondition::Absent,
+        )
+        .await
+        .unwrap();
+    let observed = PairedReads::observed(scoped.documents().clone());
+    let fixture = Fixture::new(observed.clone()).await;
+    assert_eq!(
+        fixture
+            .client()
+            .mark_remixed(request("existing"))
+            .await
+            .unwrap()
+            .unwrap(),
+        MarkRemixedReply {
+            changed: false,
+            business_revision: u64::MAX
+        }
+    );
+    assert_eq!(
+        fixture.client().mark_remixed(request("new")).await.unwrap(),
+        Err(MarkerFailure::Content(ContentError::RevisionExhausted))
+    );
+    observed.assert_calls(2, 0);
+    let persisted = scoped
+        .documents()
+        .get(COLLECTION, MARKER_DOCUMENT_KEY)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(persisted.version, version);
+    assert_eq!(persisted.doc, original);
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn memory_revision_max_preserves_duplicate_and_refuses_changed_state() {
+    revision_exhaustion(Arc::new(MemoryStorage::new())).await;
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn sqlite_revision_max_preserves_duplicate_and_refuses_changed_state() {
+    let directory = tempfile::tempdir().unwrap();
+    revision_exhaustion(Arc::new(
+        tinystoragedrivers_sqlite::SqliteStorage::open(directory.path().join("markers.db"))
+            .unwrap(),
+    ))
+    .await;
+}
