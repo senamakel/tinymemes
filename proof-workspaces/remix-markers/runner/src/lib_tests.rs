@@ -141,18 +141,101 @@ async fn memory_marker_is_native_reopened_and_scope_isolated() {
     marker_roundtrip(Arc::new(MemoryStorage::new())).await;
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn sqlite_marker_is_native_reopened_and_scope_isolated() {
+async fn sqlite_marker_survives_cold_database_reopen() {
     let directory = tempfile::tempdir().unwrap();
-    marker_roundtrip(Arc::new(
-        tinystoragedrivers_sqlite::SqliteStorage::open(directory.path()).unwrap(),
-    ))
-    .await;
+    let path = directory.path().join("markers.db");
+    {
+        let backend = tinystoragedrivers_sqlite::SqliteStorage::open(&path).unwrap();
+        let scoped = backend.for_scope(&Scope::new("alice").unwrap()).unwrap();
+        let fixture = Fixture::new(scoped.documents().clone()).await;
+        let marked = fixture
+            .client()
+            .mark_remixed(request("reply"))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(marked.changed);
+        assert_eq!(marked.business_revision, 1);
+        fixture.host.shutdown(Duration::from_secs(3)).await;
+    }
+    assert!(path.is_file());
+    let reopened_backend = tinystoragedrivers_sqlite::SqliteStorage::open(&path).unwrap();
+    let alice = reopened_backend
+        .for_scope(&Scope::new("alice").unwrap())
+        .unwrap();
+    let bob = reopened_backend
+        .for_scope(&Scope::new("bob").unwrap())
+        .unwrap();
+    let alice_fixture = Fixture::new(alice.documents().clone()).await;
+    let bob_fixture = Fixture::new(bob.documents().clone()).await;
+    assert!(
+        alice_fixture
+            .client()
+            .was_remixed(request("reply"))
+            .await
+            .unwrap()
+            .unwrap()
+    );
+    assert!(
+        !bob_fixture
+            .client()
+            .was_remixed(request("reply"))
+            .await
+            .unwrap()
+            .unwrap()
+    );
+    let duplicate = alice_fixture
+        .client()
+        .mark_remixed(request("reply"))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!duplicate.changed);
+    assert_eq!(duplicate.business_revision, 1);
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn same_artifact_wrong_instance_cannot_replay_victim_callback() {
+async fn simultaneous_same_artifact_load_is_refused_without_native_effects() {
     let backend = MemoryStorage::new();
     let scoped = backend.for_scope(&Scope::new("victim").unwrap()).unwrap();
     let fixture = Fixture::new(scoped.documents().clone()).await;
+    let second_host = ModuleHost::new(fixture.broker.clone());
+    let second_binding = second_host
+        .prepare_host_callbacks(vec![endpoint(MARKER_DOCUMENT_PATH).unwrap()])
+        .await
+        .unwrap();
+    serve_collection(
+        &second_binding,
+        MARKER_DOCUMENT_PATH.parse().unwrap(),
+        scoped.documents().clone(),
+        COLLECTION,
+    )
+    .await
+    .unwrap();
+    let error = second_host
+        .load_file_with_host_callbacks(&fixture.artifact, json!({}), &second_binding)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, tinybus::Error::ModuleRefused { reason, .. } if reason == "module bus name is already owned")
+    );
+    assert!(
+        scoped
+            .documents()
+            .get(COLLECTION, MARKER_DOCUMENT_KEY)
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn replacement_instance_cannot_enter_retained_previous_callback() {
+    let backend = MemoryStorage::new();
+    let scoped = backend.for_scope(&Scope::new("victim").unwrap()).unwrap();
+    let fixture = Fixture::new(scoped.documents().clone()).await;
+    let old_peer = fixture.binding.guard().module_peer().unwrap();
+    fixture.host.shutdown(Duration::from_secs(3)).await;
+    // Keep the original registration and host Connection alive, never re-enable
+    // or retarget its captured guard. Only native loader creates the new peer.
     let second_host = ModuleHost::new(fixture.broker.clone());
     let second_binding = second_host
         .prepare_host_callbacks(vec![endpoint(MARKER_DOCUMENT_PATH).unwrap()])
@@ -170,10 +253,9 @@ async fn same_artifact_wrong_instance_cannot_replay_victim_callback() {
         .load_file_with_host_callbacks(&fixture.artifact, json!({}), &second_binding)
         .await
         .unwrap();
-    let second_peer = second_binding.guard().module_peer().unwrap();
-    // Victim host capability sends a genuine authenticated request to B. B must
-    // not use its sender identity to enter the callback captured for module A.
-    let replay = RemixMarkerClient::new(fixture.proxy_to(second_peer.as_str())).unwrap();
+    let new_peer = second_binding.guard().module_peer().unwrap();
+    assert_ne!(old_peer, new_peer);
+    let replay = RemixMarkerClient::new(fixture.proxy_to(new_peer.as_str())).unwrap();
     assert!(replay.mark_remixed(request("reply")).await.is_err());
     assert!(
         scoped
@@ -316,7 +398,8 @@ async fn memory_stale_actor_refuses_without_replacement_grant() {
 async fn sqlite_stale_actor_refuses_without_replacement_grant() {
     let directory = tempfile::tempdir().unwrap();
     stale_actor(Arc::new(
-        tinystoragedrivers_sqlite::SqliteStorage::open(directory.path()).unwrap(),
+        tinystoragedrivers_sqlite::SqliteStorage::open(directory.path().join("markers.db"))
+            .unwrap(),
     ))
     .await;
 }
@@ -463,7 +546,10 @@ async fn memory_competing_duplicate_marker_commits_once() {
 async fn sqlite_competing_distinct_markers_preserve_union_after_cas_reread() {
     let directory = tempfile::tempdir().unwrap();
     competing_markers(
-        Arc::new(tinystoragedrivers_sqlite::SqliteStorage::open(directory.path()).unwrap()),
+        Arc::new(
+            tinystoragedrivers_sqlite::SqliteStorage::open(directory.path().join("markers.db"))
+                .unwrap(),
+        ),
         false,
     )
     .await;
