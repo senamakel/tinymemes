@@ -2,7 +2,7 @@
 
 The current module implements bounded native CAS. The historical staging
 sections below record failures and their disposition; they do not describe
-the final implementation. Public-only final acceptance is pending.
+the final implementation. Final public-only acceptance is recorded below.
 
 The draft also depends on unmerged TinyBus PR60 at exact
 `5256d08c41df5852ac1ccfcb58d4b24282b53cd7`. Both workspace manifests use a

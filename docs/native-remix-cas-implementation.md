@@ -66,7 +66,7 @@ Preserve existing actual SDK/native fixtures and add:
   new marker returns Content(RevisionExhausted), preserving native bytes/version;
 - real port wrapper that returns Conflict for the first bounded attempts and
   counts fresh Get/conditional Put; assert eventual merge or exact exhaustion;
-- real native-port refusal interposition proving non-Conflict errors and an
+- real native-port refusal interposition proving non-Conflict errors and a
   native-port lost-acknowledgment error do not trigger hidden retries or defaults;
   this is not proof of a dropped outer TinyBus acknowledgment;
 - maintain barrier-controlled independent-handle conflicts and duplicate-only
