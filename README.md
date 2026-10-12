@@ -276,3 +276,30 @@ tinyinference-decisions = { path = "vendor/tinyagents/vendor/tinyinference/crate
 | `meme_index.rs`, `meme_research.rs` | `MemeIndex` (vetting), `GiphyPageResearcher` |
 | `region.rs`, `intent.rs`, `conversation.rs` | region packs, intents, delivered history |
 | `llm_eval.rs`, `env.rs`, `model.rs`, `source.rs` | LLM-as-Jev, env config, chat model, meme sources |
+
+## Content-only bus module
+
+The workspace includes `tinymemes-bus`, a minimal typed contract/client, and
+`tinymemes-module`, a TinyBus cdylib. For these content operations, a host
+uses the bus crate and loads the compiled module; it does not link or wrap
+the implementation library. The full remix/research engine is not yet
+exposed by this foundation.
+The module transforms caller-supplied learned-index snapshots and reply markers
+using the existing TinyMemes index operations. It is stateless and performs no
+inference, research, filesystem or storage operations.
+
+A matching content revision is only a comparison of supplied values. It is
+**not** durable CAS, profile admission, generation authority, research
+verification or legacy import authority. Native persistence, research merge
+publication, stop/drain and source-preserving migration remain separate owning
+work; a host must not emulate these with a local reducer or raw backend.
+See [the scope and implementation note](docs/state-module-foundation.md).
+
+```sh
+cargo build -p tinymemes-module
+cargo run -p tinymemes-bus --example compiled_state -- target/debug/libtinymemes_module.so
+```
+
+The example imports only the contract and TinyBus, loads the actual cdylib and
+checks isolated input values and typed revision refusal. The path above is for
+Linux; use the platform library filename on macOS or Windows.

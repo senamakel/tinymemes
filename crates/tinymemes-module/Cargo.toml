@@ -1,0 +1,31 @@
+[package]
+name = "tinymemes-module"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "GPL-3.0-only"
+description = "Stateless TinyMemes content operations over the TinyBus module ABI."
+repository = "https://github.com/tinyhumansai/tinymemes"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tinymemes = { path = "../..", version = "0.1.0" }
+tinymemes-bus = { path = "../tinymemes-bus", version = "0.1.0" }
+serde_json = "1"
+async-trait = "0.1"
+tinybus = { git = "https://github.com/tinyhumansai/tinybus", rev = "9062dd8daa6f7d8fa9fbb3eafc144f0e0f9d82f2", default-features = false }
+tinybus-module = { git = "https://github.com/tinyhumansai/tinybus", rev = "9062dd8daa6f7d8fa9fbb3eafc144f0e0f9d82f2" }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tinybus = { git = "https://github.com/tinyhumansai/tinybus", rev = "9062dd8daa6f7d8fa9fbb3eafc144f0e0f9d82f2", default-features = false, features = ["modules"] }
+
+[lints.rust]
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
