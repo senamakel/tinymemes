@@ -67,9 +67,11 @@ Preserve existing actual SDK/native fixtures and add:
 - real port wrapper that returns Conflict for the first bounded attempts and
   counts fresh Get/conditional Put; assert eventual merge or exact exhaustion;
 - real native-port refusal interposition proving non-Conflict errors and an
-  outer lost-ack error do not trigger hidden retries or defaults;
+  native-port lost-acknowledgment error do not trigger hidden retries or defaults;
+  this is not proof of a dropped outer TinyBus acknowledgment;
 - maintain barrier-controlled independent-handle conflicts and duplicate-only
-  one-commit assertions; add SQLite duplicate contender parity;
+  one-commit assertions. SQLite distinct contenders are executed; SQLite
+  duplicate contender parity remains a possible unproved addition;
 - preserve fresh private-broker scope positives, exact duplicate-name refusal,
   corrected sequential replacement admission, stale native grant and malformed
   state controls without changing their authority expectations.

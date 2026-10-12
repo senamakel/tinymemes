@@ -136,3 +136,65 @@ No PR 59 lifecycle correction is consumed by this bounded override. The runtime
 source ancestry must be verified against canonical 1f at handoff. Generated
 lockfile changes under local patching must be distinguished from published
 canonical dependency metadata before any dependency draft publication.
+
+## Implemented proof and final public graph
+
+The corrected, authenticated 18-case stub baseline (76242) passed three
+admission controls and failed fifteen behavior cases with Unavailable. There
+were no setup failures. The reviewed CAS implementation ff82038 then passed
+all eighteen using the explicitly unpublished local runtime override (61067).
+
+Candidate ed7f60c replaced that development override with the public exact
+Git revisions above. The locked actual compiled proof (7879) passed all
+eighteen without `--config`, local paths or Git URL aliases. The root/module
+and adapter resolve one TinyBus5256 identity; the proof runner has no SDK
+dependency. b526207 removed its unnecessary SDK replacement entry.
+
+Final public-graph acceptance 86701 passed default and all-features suites
+(87 tests each, no failures/ignored), root and excluded-proof formatting,
+strict Clippy, strict public documentation, both Rust1.88 builds, and the
+classic compiled content-module example. This retains classic snapshot and
+pure reducer behavior. Logs are under `target/gates/public-*.log`.
+
+The executed marker cases include cold SQLite reopen, private-broker scope
+isolation, canonical duplicate-name refusal, replacement B refusal through
+retained A authority plus fresh B control, exact unauthenticated/plain refusal,
+strict stored-envelope refusal, real native CAS races, stale-grant mutation
+refusal, u64MAX no-op/exhaustion, eight-attempt conflict bounds, and non-conflict
+no-retry. The lost acknowledgment fixture commits an actual native Put then
+returns native-port Unavailable; it proves uncertain native-port outcome, not
+a lost outer TinyBus acknowledgment. SQLite duplicate-contender parity was
+not executed (SQLite distinct contenders were). No Mongo/cloud deployment,
+learning/research, import, reset/drain, released module or OpenHuman migration
+is established.
+
+## Final coverage and publication checkpoint
+
+At b526207, instrumented workspace87 and actual18 passed (77070), followed
+by another actual18 under the owning dependency-coverage invocation (51434).
+The real loaded `target/debug/libtinymemes_module.so` was included explicitly
+with workspace test binaries and the proof runner in the LLVM export. Its
+marker implementation has 47/50 mapped lines (94%) and 58/62 regions (93.55%).
+The separately instrumented actual native runner measures the bus client at
+19/20 mapped lines (95%), with all five mapped functions executed.
+
+The first show-env capture reused uninstrumented client artifacts; its zero
+client counters were not claimed as behavior coverage. The final dependency
+report initially filtered out the path dependency: cargo-llvm-cov0.8.7
+`--dep-coverage` currently admits crates.io paths only. The direct LLVM export
+of that same instrumented runner/profile supplies the client result above.
+No test or coverage threshold was disabled. The repository has no separate
+coverage CI threshold; the production-only combined mapped summary is
+2568/3038 lines (84.53%), across 22 owner files.
+This is not an all-files90 claim or complete async branch coverage: async-trait
+generated futures provide limited source mappings, while the actual native
+CAS/admission/error controls remain independently asserted by the18proofs.
+
+Exact local evidence under `target/gates/`: public-acceptance.log and its
+individual gate logs; public-coverage-final-units.log (87);
+public-coverage-final-actual.log (18); public-coverage-final-export.json;
+public-coverage-objects.json (including actual .so); public-bus-coverage.log
+(18); public-bus-native-export.json; public-own-coverage-summary.json.
+All commands used the public pinned graph without local Cargo overrides.
+The production source has not changed since reviewed ff82038; subsequent
+changes are fixture lint compatibility, public graph/CI, and evidence docs.
