@@ -236,7 +236,19 @@ async fn simultaneous_same_artifact_load_is_refused_without_native_effects() {
 async fn replacement_instance_cannot_enter_retained_previous_callback() {
     let backend = MemoryStorage::new();
     let scoped = backend.for_scope(&Scope::new("victim").unwrap()).unwrap();
-    let mut fixture = Fixture::new(scoped.documents().clone()).await;
+    let original = json!({"format_version":1,"business_revision":"0","remixed":[]});
+    let version = scoped
+        .documents()
+        .put(
+            COLLECTION,
+            MARKER_DOCUMENT_KEY,
+            original.clone(),
+            Precondition::Absent,
+        )
+        .await
+        .unwrap();
+    let old_documents = PairedReads::observed(scoped.documents().clone());
+    let mut fixture = Fixture::new(old_documents.clone()).await;
     let old_peer = fixture.binding.guard().module_peer().unwrap();
     fixture
         .host
@@ -252,10 +264,11 @@ async fn replacement_instance_cannot_enter_retained_previous_callback() {
         .prepare_host_callbacks(vec![endpoint(MARKER_DOCUMENT_PATH).unwrap()])
         .await
         .unwrap();
+    let new_documents = PairedReads::observed(scoped.documents().clone());
     serve_collection(
         &second_binding,
         MARKER_DOCUMENT_PATH.parse().unwrap(),
-        scoped.documents().clone(),
+        new_documents.clone(),
         COLLECTION,
     )
     .await
@@ -267,37 +280,60 @@ async fn replacement_instance_cannot_enter_retained_previous_callback() {
     let new_peer = second_binding.guard().module_peer().unwrap();
     assert_ne!(old_peer, new_peer);
     let replay = RemixMarkerClient::new(fixture.proxy_to(new_peer.as_str())).unwrap();
-    assert!(replay.mark_remixed(request("reply")).await.is_err());
-    assert!(
-        scoped
-            .documents()
-            .get(COLLECTION, MARKER_DOCUMENT_KEY)
-            .await
-            .unwrap()
-            .is_none()
+    assert_admission_error(
+        replay.mark_remixed(request("reply")).await.unwrap_err(),
+        tinybus::Error::NOT_ATTESTED,
     );
+    old_documents.assert_calls(0, 0);
+    new_documents.assert_calls(0, 0);
+    // B is alive and its own captured route works; the baseline Get deliberately
+    // returns Unavailable only after the native callback succeeds.
+    let fresh = RemixMarkerClient::new(
+        second_binding
+            .proxy(new_peer.as_str(), MARKER_PATH, MARKER_INTERFACE)
+            .unwrap()
+            .with_timeout(Duration::from_secs(3)),
+    )
+    .unwrap();
+    assert_eq!(
+        fresh.was_remixed(request("reply")).await.unwrap(),
+        Err(MarkerFailure::Unavailable)
+    );
+    new_documents.assert_calls(1, 0);
+    old_documents.assert_calls(0, 0);
+    let after = scoped
+        .documents()
+        .get(COLLECTION, MARKER_DOCUMENT_KEY)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(after.version, version);
+    assert_eq!(after.doc, original);
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn unauthorized_and_selector_requests_never_mutate_native_state() {
     let backend = MemoryStorage::new();
     let scoped = backend.for_scope(&Scope::new("victim").unwrap()).unwrap();
-    let fixture = Fixture::new(scoped.documents().clone()).await;
+    let observed = PairedReads::observed(scoped.documents().clone());
+    let fixture = Fixture::new(observed.clone()).await;
     let peer = fixture.binding.guard().module_peer().unwrap();
     let ordinary = fixture
         .attacker
         .proxy(peer.as_str(), MARKER_PATH, MARKER_INTERFACE)
         .unwrap();
-    assert!(
+    assert_admission_error(
         ordinary
             .call::<serde_json::Value>("MarkRemixed", (request("reply"),))
             .await
-            .is_err()
+            .unwrap_err(),
+        tinybus::Error::CONFIDENTIALITY_REQUIRED,
     );
-    assert!(
+    assert_admission_error(
         ordinary
             .call_confidential::<serde_json::Value>("MarkRemixed", (request("reply"),))
             .await
-            .is_err()
+            .unwrap_err(),
+        tinybus::Error::NOT_ATTESTED,
     );
     for field in [
         "scope",
@@ -309,14 +345,15 @@ async fn unauthorized_and_selector_requests_never_mutate_native_state() {
     ] {
         let mut value = json!({"reply_id":"reply"});
         value[field] = json!("forged");
-        assert!(
-            fixture
-                .proxy_to(peer.as_str())
-                .call_confidential::<serde_json::Value>("MarkRemixed", (value,))
-                .await
-                .is_err()
-        );
+        let error = fixture
+            .proxy_to(peer.as_str())
+            .call_confidential::<serde_json::Value>("MarkRemixed", (value,))
+            .await
+            .unwrap_err();
+        assert_eq!(error.wire_message(), "invalid marker request");
+        assert_admission_error(error, tinybus::Error::FAILED);
     }
+    observed.assert_calls(0, 0);
     assert!(
         scoped
             .documents()
@@ -370,13 +407,26 @@ async fn stale_actor(backend: Arc<dyn StorageBackend>) {
         .await
         .unwrap();
     let victim_scope = Scope::new("victim").unwrap();
+    let unguarded = backend.for_scope(&victim_scope).unwrap();
+    let original = json!({"format_version":1,"business_revision":"0","remixed":[]});
+    let original_version = unguarded
+        .documents()
+        .put(
+            COLLECTION,
+            MARKER_DOCUMENT_KEY,
+            original.clone(),
+            Precondition::Absent,
+        )
+        .await
+        .unwrap();
     let actor = backend
         .for_scope_fenced(
             &victim_scope,
             &Fence::new(guard_scope, "leases", "victim", Filter::eq("epoch", 1)),
         )
         .unwrap();
-    let fixture = Fixture::new(actor.documents().clone()).await;
+    let observed = PairedReads::observed(actor.documents().clone());
+    let fixture = Fixture::new(observed.clone()).await;
     guard
         .documents()
         .put("leases", "victim", json!({"epoch":2}), Precondition::None)
@@ -391,15 +441,15 @@ async fn stale_actor(backend: Arc<dyn StorageBackend>) {
             .unwrap_err(),
         MarkerFailure::Storage(tinystoragedrivers_bus::StorageKind::Fenced)
     );
-    let unguarded = backend.for_scope(&victim_scope).unwrap();
-    assert!(
-        unguarded
-            .documents()
-            .get(COLLECTION, MARKER_DOCUMENT_KEY)
-            .await
-            .unwrap()
-            .is_none()
-    );
+    observed.assert_calls(1, 1);
+    let after = unguarded
+        .documents()
+        .get(COLLECTION, MARKER_DOCUMENT_KEY)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(after.version, original_version);
+    assert_eq!(after.doc, original);
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn memory_stale_actor_refuses_without_replacement_grant() {
@@ -421,7 +471,31 @@ async fn sqlite_stale_actor_refuses_without_replacement_grant() {
 struct PairedReads {
     inner: Arc<dyn DocumentStore>,
     reads: std::sync::atomic::AtomicUsize,
-    barrier: tokio::sync::Barrier,
+    puts: std::sync::atomic::AtomicUsize,
+    barrier: Option<tokio::sync::Barrier>,
+}
+impl PairedReads {
+    fn observed(inner: Arc<dyn DocumentStore>) -> Arc<Self> {
+        Arc::new(Self {
+            inner,
+            reads: std::sync::atomic::AtomicUsize::new(0),
+            puts: std::sync::atomic::AtomicUsize::new(0),
+            barrier: None,
+        })
+    }
+    fn assert_calls(&self, reads: usize, puts: usize) {
+        assert_eq!(self.reads.load(std::sync::atomic::Ordering::SeqCst), reads);
+        assert_eq!(self.puts.load(std::sync::atomic::Ordering::SeqCst), puts);
+    }
+}
+// Error identity survives nested wire forwarding: canonical wire_name maps
+// NotAttested/ConfidentialityRequired directly, and MethodFailed retains name.
+fn assert_admission_error(error: tinybus::Error, name: &str) {
+    assert_eq!(
+        error.wire_name(),
+        name,
+        "unexpected failure category: {error:?}"
+    );
 }
 #[async_trait::async_trait]
 impl DocumentStore for PairedReads {
@@ -442,8 +516,11 @@ impl DocumentStore for PairedReads {
         Option<tinystoragedrivers_core::Versioned<serde_json::Value>>,
     > {
         let result = self.inner.get(collection, id).await;
-        if self.reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < 2 {
-            self.barrier.wait().await;
+        let ordinal = self.reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if let Some(barrier) = &self.barrier {
+            if ordinal < 2 {
+                barrier.wait().await;
+            }
         }
         result
     }
@@ -454,6 +531,7 @@ impl DocumentStore for PairedReads {
         doc: serde_json::Value,
         condition: Precondition,
     ) -> tinystoragedrivers_core::Result<tinystoragedrivers_core::Version> {
+        self.puts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         self.inner.put(collection, id, doc, condition).await
     }
     async fn delete(
@@ -509,7 +587,8 @@ async fn competing_markers(backend: Arc<dyn StorageBackend>, same_id: bool) {
     let documents: Arc<dyn DocumentStore> = Arc::new(PairedReads {
         inner: scoped.documents().clone(),
         reads: std::sync::atomic::AtomicUsize::new(0),
-        barrier: tokio::sync::Barrier::new(2),
+        puts: std::sync::atomic::AtomicUsize::new(0),
+        barrier: Some(tokio::sync::Barrier::new(2)),
     });
     let first = Fixture::new(documents.clone()).await;
     let second = Fixture::new(documents).await;
