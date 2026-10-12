@@ -850,7 +850,10 @@ async fn non_conflict_native_errors_never_retry_or_expose_private_cause() {
     use tinystoragedrivers_bus::StorageKind;
     use tinystoragedrivers_core::ErrorKind;
     for (index, (native, wire)) in [
-        (ErrorKind::Unsupported, StorageKind::Unsupported),
+        (
+            ErrorKind::Unsupported(tinystoragedrivers_core::Capability::Fencing),
+            StorageKind::Unsupported,
+        ),
         (ErrorKind::Fenced, StorageKind::Fenced),
         (ErrorKind::Unavailable, StorageKind::Unavailable),
         (ErrorKind::AlreadyExists, StorageKind::AlreadyExists),
