@@ -286,8 +286,7 @@ async fn replacement_instance_cannot_enter_retained_previous_callback() {
     );
     old_documents.assert_calls(0, 0);
     new_documents.assert_calls(0, 0);
-    // B is alive and its own captured route works; the baseline Get deliberately
-    // returns Unavailable only after the native callback succeeds.
+    // B is alive and its own captured route performs a successful native Get.
     let fresh = RemixMarkerClient::new(
         second_binding
             .proxy(new_peer.as_str(), MARKER_PATH, MARKER_INTERFACE)
@@ -297,7 +296,7 @@ async fn replacement_instance_cannot_enter_retained_previous_callback() {
     .unwrap();
     assert_eq!(
         fresh.was_remixed(request("reply")).await.unwrap(),
-        Err(MarkerFailure::Unavailable)
+        Ok(false)
     );
     new_documents.assert_calls(1, 0);
     old_documents.assert_calls(0, 0);
@@ -465,8 +464,8 @@ async fn sqlite_stale_actor_refuses_without_replacement_grant() {
     .await;
 }
 
-// Interpose only scheduling over a real native port. All state and CAS remain
-// inside the native driver. Exactly two initial reads observe the same state.
+// Interpose scheduling and explicit fault/acknowledgment injection over a real
+// native port. All persisted state and competing CAS remain in the driver. Exactly two initial reads observe the same state.
 #[derive(Clone, Copy, Debug)]
 enum PutPolicy {
     Conflicts(usize),
