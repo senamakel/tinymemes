@@ -1,4 +1,19 @@
-# Persistent remix-marker staging
+# Persistent remix markers: dependency draft
+
+The current module implements bounded native CAS. The historical staging
+sections below record failures and their disposition; they do not describe
+the final implementation. Public-only final acceptance is pending.
+
+The draft also depends on unmerged TinyBus PR60 at exact
+`5256d08c41df5852ac1ccfcb58d4b24282b53cd7`. Both workspace manifests use a
+temporary source/name/version-qualified Cargo `[replace]` selecting the same
+public GitHub repository at that revision. Cargo rejects same-source `[patch]`;
+replacement selectors cannot contain a revision query. Original TinyBus
+declarations all remain pinned to canonical `1f255765`. Metadata resolves one
+TinyBus identity at 5256 and the module SDK at the same revision; no local paths
+or alternate Git URL are needed. Remove replacements and refresh exact pins
+after PR60 and TSD27 are canonical before marking this draft ready.
+
 
 This branch depends on **unmerged** TinyStorageDrivers PR 27 at
 `7c5596f37e5d5440fbfa3a049a3ca98571885584`. It is not a released contract.

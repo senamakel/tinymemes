@@ -1,8 +1,10 @@
 # Bounded marker CAS implementation note
 
-Status: source-only preparation. Module logic remains the deliberate Get then
-Unavailable baseline. Runtime replacement initialization is under investigation
-in the TinyBus owner; no routing configuration workaround is selected here.
+Status: implemented and reviewed at ff82038. The original 18-case authentic
+baseline passed three admission controls and failed fifteen behavior cases;
+the implementation passed all eighteen with the explicitly unpublished runtime
+path override. Final public-only graph acceptance is recorded separately.
+The following sequence describes the implemented boundary, not host migration.
 
 ## Native state and reducer boundary
 
@@ -48,7 +50,7 @@ no authority. Do not fabricate migration/import receipts or source ownership.
    Precondition::Version for the returned native Version. No unconditional Put.
    A successful native Put permits the successful committed result.
 6. Only native StorageKind::Conflict triggers a bounded fresh Get/reapply loop
-   (proposed maximum eight attempts). AlreadyExists, Fenced, Unsupported,
+   (maximum eight attempts). AlreadyExists, Fenced, Unsupported,
    unavailable transport, malformed state and content refusal never retry as
    conflicts. Exhaustion returns ConflictExhausted. Lost acknowledgments remain
    uncertain: an outer transport failure makes no rollback claim.
@@ -72,5 +74,5 @@ Preserve existing actual SDK/native fixtures and add:
   corrected sequential replacement admission, stale native grant and malformed
   state controls without changing their authority expectations.
 
-No test is executed or marked passed by this note. Learning/research operations,
+See native-remix-markers.md for exact executed test chronology. Learning/research operations,
 legacy import, generation reset and callback drain remain outside this slice.

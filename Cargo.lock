@@ -1144,6 +1144,12 @@ dependencies = [
 name = "tinybus"
 version = "0.1.4"
 source = "git+https://github.com/tinyhumansai/tinybus?rev=1f2557657db97470cd4efb7e1fc2f374f36fdd22#1f2557657db97470cd4efb7e1fc2f374f36fdd22"
+replace = "tinybus 0.1.4 (git+https://github.com/tinyhumansai/tinybus?rev=5256d08c41df5852ac1ccfcb58d4b24282b53cd7)"
+
+[[package]]
+name = "tinybus"
+version = "0.1.4"
+source = "git+https://github.com/tinyhumansai/tinybus?rev=5256d08c41df5852ac1ccfcb58d4b24282b53cd7#5256d08c41df5852ac1ccfcb58d4b24282b53cd7"
 dependencies = [
  "async-trait",
  "flate2",
@@ -1165,11 +1171,17 @@ dependencies = [
 name = "tinybus-module"
 version = "0.1.4"
 source = "git+https://github.com/tinyhumansai/tinybus?rev=1f2557657db97470cd4efb7e1fc2f374f36fdd22#1f2557657db97470cd4efb7e1fc2f374f36fdd22"
+replace = "tinybus-module 0.1.4 (git+https://github.com/tinyhumansai/tinybus?rev=5256d08c41df5852ac1ccfcb58d4b24282b53cd7)"
+
+[[package]]
+name = "tinybus-module"
+version = "0.1.4"
+source = "git+https://github.com/tinyhumansai/tinybus?rev=5256d08c41df5852ac1ccfcb58d4b24282b53cd7#5256d08c41df5852ac1ccfcb58d4b24282b53cd7"
 dependencies = [
  "async-trait",
  "serde",
  "serde_json",
- "tinybus",
+ "tinybus 0.1.4 (git+https://github.com/tinyhumansai/tinybus?rev=5256d08c41df5852ac1ccfcb58d4b24282b53cd7)",
  "tokio",
  "tracing",
 ]
@@ -1210,7 +1222,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
- "tinybus",
+ "tinybus 0.1.4 (git+https://github.com/tinyhumansai/tinybus?rev=1f2557657db97470cd4efb7e1fc2f374f36fdd22)",
  "tinystoragedrivers-bus",
  "tokio",
 ]
@@ -1222,8 +1234,8 @@ dependencies = [
  "async-trait",
  "serde",
  "serde_json",
- "tinybus",
- "tinybus-module",
+ "tinybus 0.1.4 (git+https://github.com/tinyhumansai/tinybus?rev=1f2557657db97470cd4efb7e1fc2f374f36fdd22)",
+ "tinybus-module 0.1.4 (git+https://github.com/tinyhumansai/tinybus?rev=1f2557657db97470cd4efb7e1fc2f374f36fdd22)",
  "tinymemes",
  "tinymemes-bus",
  "tinystoragedrivers-bus",
@@ -1237,7 +1249,7 @@ source = "git+https://github.com/tinyhumansai/tinystoragedrivers?rev=7c5596f37e5
 dependencies = [
  "serde",
  "serde_json",
- "tinybus",
+ "tinybus 0.1.4 (git+https://github.com/tinyhumansai/tinybus?rev=1f2557657db97470cd4efb7e1fc2f374f36fdd22)",
 ]
 
 [[package]]
