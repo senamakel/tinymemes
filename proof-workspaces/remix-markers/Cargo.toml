@@ -1,0 +1,6 @@
+[workspace]
+members = ["runner"]
+resolver = "3"
+
+[profile.dev]
+debug = false

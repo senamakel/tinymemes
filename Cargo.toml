@@ -1,4 +1,5 @@
 [workspace]
+exclude = ["proof-workspaces/remix-markers"]
 members = [".", "crates/tinymemes-bus", "crates/tinymemes-module"]
 resolver = "2"
 
