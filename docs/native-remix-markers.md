@@ -105,3 +105,19 @@ here. TinyMemes setup and CAS stub remain unchanged. The same-artifact
 replacement proof must be rerun after the owning correction is available, or
 carry an explicit unpublished dependency in a draft; no stateless_alias routing
 configuration workaround is introduced.
+
+## Explicit unpublished runtime proof strategy
+
+While the owning native reload correction is not canonical, a bounded local
+proof may supply a generated Cargo patch configuration under this checkout's
+`target/gates/`. It patches **both** tinybus and tinybus-module from the exact
+same clean owning runtime worktree, avoiding duplicate connection types or a
+mixed SDK/host contract. `scripts/test-remix-markers.sh --config <path>` passes
+that override to root module build, metadata and excluded proof runner alike.
+Record the exact runtime HEAD, clean status and patch file with each run.
+Normal checked-in manifest pins remain canonical 1f; results with this override
+are explicitly unpublished-dependency evidence, never canonical availability.
+No PR 59 lifecycle correction is consumed by this bounded override. The runtime
+source ancestry must be verified against canonical 1f at handoff. Generated
+lockfile changes under local patching must be distinguished from published
+canonical dependency metadata before any dependency draft publication.
