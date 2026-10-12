@@ -40,3 +40,26 @@ acknowledgment is uncertain and does not imply rollback.
 Deterministic competing-read fixtures interpose a two-reader barrier over real native documents, retaining native CAS and state rather than imitating persistence. This work does
 not establish research verification, learning/import authority, session drain,
 reset behavior, released module availability or host migration.
+
+## First actual baseline
+
+Cancel-aware run 53711 exited 101. The actual SDK module compiled, and all ten
+proof cases executed: one unauthorized/selector control passed; eight behavior
+cases failed on the deliberately returned Unavailable (two reopen/scope, three
+competing-read CAS, one corrupt-state, two stale-grant mutation cases). Native
+Get is allowed to read an immutable stale actor snapshot; its mutation must
+still be refused once the operation is implemented. Those failures do not
+prove the driver fences reads.
+
+The remaining wrong-instance case failed during fixture setup, not at callback
+admission: canonical TinyBus reserves the artifact manifest bus name in the
+shared broker, so a second same-artifact live instance is rejected as "module
+bus name is already owned", even with separate ModuleHost objects. The public
+canonical loader exposes no instance-name override. This exact replay proof
+remains blocked and unproved; no manifest spoofing or loader relaxation is
+introduced here. The test is retained to identify the missing composition
+capability. Production CAS implementation is pending the required authority
+proof disposition.
+
+Baseline log: `target/gates/remix-marker-red.log`. Earlier statements that all
+staged tests were unexecuted describe the pre-run checkpoint only.
