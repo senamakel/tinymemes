@@ -3,9 +3,10 @@
 ## Scope and current stage
 
 Canonical base is TinyMemes dc028f3531530bc06f558fa3ce7a69f3bfc9e935.
-The operation contract, compiled-module Get-only baseline, and regression sources
-are staged. No content baseline has executed yet and no production CAS loop is
-implemented. The existing marker implementation remains unchanged.
+The operation contract and bounded native CAS implementation are complete at
+592b6db. The existing marker implementation remains unchanged. Broader owner
+gates and publication are pending; the authentic baseline and candidate results
+are recorded below.
 
 TinyBus canonical main 40814a8279ff71b8fb411f9f29362c8ec0be51e2 contains both
 PR59 callback drain/cancellation accounting and PR60 native SDK reload correction.
@@ -16,8 +17,10 @@ establish OpenHuman reset/drain or a released module.
 Canonical TSD d2f85b2 still pins TinyBus 1f255765. This development branch now
 pins the public, not-yet-merged owning update
 a981da30c29c50b89f348ac1376fc7b9469bcbec and canonical TinyBus40814 throughout.
-Historical Cargo replacements are removed. Both locks and fresh metadata/proofs
-still need regeneration and execution after the dependency owner's Cargo handoff.
+Historical Cargo replacements are removed. Both locks were regenerated and inspected: root metadata resolves exactly one
+TinyBus and one SDK at40814; excluded proof resolves exactly one TinyBus and no
+SDK. All TSD packages resolve the exact public a981 commit. No external path
+package or replacement is present.
 This graph is an explicit unpublished TSD dependency, not canonical availability.
 No aliases, copied adapter, or host shim are used.
 
@@ -46,7 +49,7 @@ Meme usage increments only the first exact URL match. Removal deletes every
 exact region/title match. Verification scores and source metadata remain data;
 no new research admission, deduplication, or validation policy is introduced.
 
-## Implementation sequence after genuine baseline
+## Implemented operation sequence
 
 1. Decode the member's deny-unknown-fields request and retain actual sender.
 2. Get content-state afresh through the admitted native callback. Missing alone
@@ -81,7 +84,27 @@ nonconflict refusal, actual Put followed by port acknowledgment loss, native
 stale-grant mutation refusal, plain/unbound caller refusal, and unknown selectors.
 Fault-injection controls are separate from the genuine conditional-write race.
 Snapshot Get may succeed for stale grants; mutation must refuse and preserve
-native version/data. None of these unexecuted sources is RED/GREEN evidence yet.
+native version/data. The source-only stage was not evidence. Actual executions are recorded below.
+
+## Executed baseline and candidate
+
+At graph9df53aa, cancel-aware marker6837 exited0: all18 existing real compiled
+marker cases passed on canonical Bus40814/public TSD28a981. Content19209 exited101:
+all17 new cases ran, two admission controls passed and fifteen failed on the
+Get-only stub's Unavailable. No compiler/setup failure was counted as RED.
+The replacement negative reached exact NotAttested with zero native calls;
+its failure was the admitted fresh B no-op positive returning Unavailable.
+
+After production592b6db, cancel-aware70124 exited0. The actual SDK module rebuilt
+and the complete authentic proof passed35/0failed/0ignored (17catalog+18marker,
+not counted twice). All baseline assertions were retained. This includes true
+SQLite file reopen, Memory/SQLite native stale-write refusal, real native
+competing CAS, full-field preservation and native-port lost acknowledgment.
+
+Logs under this worktree's target/gates: canonical-marker-controls.log,
+content-native-red.log, content-module-green-build.log, content-native-green.log.
+These local native proofs are not external Mongo/S3, historical import, or
+OpenHuman composition evidence.
 
 Learning/research, historical import, publication/bootstrap authority, broader
 engine persistence, reset, and OpenHuman adapters remain outside this slice.
