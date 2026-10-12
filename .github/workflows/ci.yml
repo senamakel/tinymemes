@@ -16,6 +16,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - run: python3 scripts/test-remix-markers-tests.py
       - run: cargo fmt --all -- --check
       - run: cargo test --workspace --no-default-features
       - run: cargo test --workspace --all-features

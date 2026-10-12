@@ -198,3 +198,18 @@ public-coverage-objects.json (including actual .so); public-bus-coverage.log
 All commands used the public pinned graph without local Cargo overrides.
 The production source has not changed since reviewed ff82038; subsequent
 changes are fixture lint compatibility, public graph/CI, and evidence docs.
+
+## Hosted review portability correction
+
+Initial hosted Actions run38240883480 passed all gates, including the18
+native markers. CodeRabbit then identified Bash3.2 nounset empty-array
+expansion in the shell proof runner. Official bash:3.2 (image digest
+0fd7cb8499c63a3c9345e7088a9cd83bb69f6e895e83833859aff838a0312091)
+reproduced the unbound-variable refusal before Cargo. A mocked runner
+regression preserves all three Cargo command arguments and artifact path:
+corrected old-script baseline1PASS/1FAIL, then direct quoted positional
+argument forwarding2PASS on Bash3.2 and current Bash. The first assertion
+fixture omitted the existing debug path component; it was corrected and
+never counted as product evidence. CI runs the two stdlib regressions without
+requiring Docker; Bash3.2 verification is explicit local evidence. Rust CAS,
+dependency graph and native admission code did not change.
