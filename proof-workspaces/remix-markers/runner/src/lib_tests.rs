@@ -12,7 +12,7 @@ use tinystoragedrivers_tinybus::{endpoint, serve_collection};
 
 const COLLECTION: &str = "remix_markers";
 struct Fixture {
-    host: ModuleHost,
+    host: Option<ModuleHost>,
     broker: Broker,
     binding: HostCallbackBinding,
     attacker: Connection,
@@ -58,7 +58,7 @@ impl Fixture {
             .await
             .unwrap();
         Self {
-            host,
+            host: Some(host),
             broker,
             binding,
             attacker,
@@ -156,7 +156,12 @@ async fn sqlite_marker_survives_cold_database_reopen() {
             .unwrap();
         assert!(marked.changed);
         assert_eq!(marked.business_revision, 1);
-        fixture.host.shutdown(Duration::from_secs(3)).await;
+        fixture
+            .host
+            .as_ref()
+            .unwrap()
+            .shutdown(Duration::from_secs(3))
+            .await;
     }
     assert!(path.is_file());
     let reopened_backend = tinystoragedrivers_sqlite::SqliteStorage::open(&path).unwrap();
@@ -231,9 +236,15 @@ async fn simultaneous_same_artifact_load_is_refused_without_native_effects() {
 async fn replacement_instance_cannot_enter_retained_previous_callback() {
     let backend = MemoryStorage::new();
     let scoped = backend.for_scope(&Scope::new("victim").unwrap()).unwrap();
-    let fixture = Fixture::new(scoped.documents().clone()).await;
+    let mut fixture = Fixture::new(scoped.documents().clone()).await;
     let old_peer = fixture.binding.guard().module_peer().unwrap();
-    fixture.host.shutdown(Duration::from_secs(3)).await;
+    fixture
+        .host
+        .as_ref()
+        .unwrap()
+        .shutdown(Duration::from_secs(3))
+        .await;
+    drop(fixture.host.take());
     // Keep the original registration and host Connection alive, never re-enable
     // or retarget its captured guard. Only native loader creates the new peer.
     let second_host = ModuleHost::new(fixture.broker.clone());
