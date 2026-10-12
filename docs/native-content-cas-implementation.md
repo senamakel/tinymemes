@@ -13,10 +13,13 @@ Its SDK execution-context behavior matches the prior tested 5256 candidate;
 the newer host lifecycle behavior requires fresh canonical tests. This does not
 establish OpenHuman reset/drain or a released module.
 
-Canonical TSD d2f85b2 still pins TinyBus 1f255765. Its owning pin-bump prerequisite
-must provide a single matching TinyBus identity before removing the historical
-Cargo replacement in this checkout. No aliases, copied adapter, or host shim
-are proposed.
+Canonical TSD d2f85b2 still pins TinyBus 1f255765. This development branch now
+pins the public, not-yet-merged owning update
+a981da30c29c50b89f348ac1376fc7b9469bcbec and canonical TinyBus40814 throughout.
+Historical Cargo replacements are removed. Both locks and fresh metadata/proofs
+still need regeneration and execution after the dependency owner's Cargo handoff.
+This graph is an explicit unpublished TSD dependency, not canonical availability.
+No aliases, copied adapter, or host shim are used.
 
 ## Contract
 
