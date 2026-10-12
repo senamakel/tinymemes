@@ -83,6 +83,7 @@ module and backend, then opens a fresh SqliteStorage from that same file.
 Its cold-reopen assertions remain unexecuted until the marker operation exists.
 
 The current module also requests the stateless ContentState global alias;
-canonical stopped-host cleanup does not detach every retained router alias.
-The replacement initialization failure is under investigation. No alias is
+ModuleHostInner::drop itself revokes callback routes without explicit peer
+detachment. Whether the stateless alias explains the observed replacement
+initialization failure is still a hypothesis under investigation. No alias is
 manually removed, no manifest is spoofed, and no loader override is added.
