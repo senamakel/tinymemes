@@ -87,3 +87,21 @@ ModuleHostInner::drop itself revokes callback routes without explicit peer
 detachment. Whether the stateless alias explains the observed replacement
 initialization failure is still a hypothesis under investigation. No alias is
 manually removed, no manifest is spoofed, and no loader override is added.
+
+## Owning SDK startup finding
+
+The subsequent canonical TinyBus source audit identified an earlier rejection:
+`tinybus-module/src/lib.rs` at the native `start_module_mode` subscriber setup
+calls `tracing::subscriber::set_global_default` for unlinked modules and returns
+TB_CLOSED on failure. Its comment explicitly identifies the global state as
+belonging to the mapped cdylib. A second initialization of that same mapped
+artifact encounters the prior global subscriber before runtime handshake or
+module setup. Linked/static tests bypass this native-only block.
+
+This source-backed startup finding supersedes the alias hypothesis as the
+replacement failure explanation. The TinyBus owner is preparing a genuine
+compiled reload regression; no correction or canonical availability is claimed
+here. TinyMemes setup and CAS stub remain unchanged. The same-artifact
+replacement proof must be rerun after the owning correction is available, or
+carry an explicit unpublished dependency in a draft; no stateless_alias routing
+configuration workaround is introduced.
