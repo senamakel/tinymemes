@@ -533,10 +533,8 @@ impl DocumentStore for PairedReads {
     > {
         let result = self.inner.get(collection, id).await;
         let ordinal = self.reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        if let Some(barrier) = &self.barrier {
-            if ordinal < 2 {
-                barrier.wait().await;
-            }
+        if let Some(barrier) = self.barrier.as_ref().filter(|_| ordinal < 2) {
+            barrier.wait().await;
         }
         result
     }
