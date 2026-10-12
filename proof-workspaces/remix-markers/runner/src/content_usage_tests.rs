@@ -1,6 +1,7 @@
 use super::*;
 use tinystoragedrivers_bus::StorageKind;
 
+/// Build the catalog client from this fixture's exact loaded-module binding.
 fn content_client(fixture: &Fixture) -> ContentUsageClient {
     ContentUsageClient::new(
         fixture
@@ -15,23 +16,27 @@ fn content_client(fixture: &Fixture) -> ContentUsageClient {
     )
     .unwrap()
 }
+/// Return matching business text without native selectors.
 fn slang_request() -> SlangUsageRequest {
     SlangUsageRequest {
         region: "gb".into(),
         text: "HELLO mate!".into(),
     }
 }
+/// Return a stored media identifier without selecting a backend route.
 fn meme_request() -> MemeUsageRequest {
     MemeUsageRequest {
         media_url: "https://example.invalid/media.gif".into(),
     }
 }
+/// Return an exact stored region/title match for removal.
 fn remove_request() -> RemoveMemeRequest {
     RemoveMemeRequest {
         region: "gb".into(),
         title: "wave".into(),
     }
 }
+/// Construct trusted fixture data with legal duplicates and complete histories.
 fn catalog(revision: u64) -> serde_json::Value {
     let term = LearnedTerm {
         region: "gb".into(),
@@ -77,6 +82,7 @@ fn catalog(revision: u64) -> serde_json::Value {
         },
     })
 }
+/// Seed only the supplied scratch native port, conditional on document absence.
 async fn seed(
     documents: &dyn DocumentStore,
     value: serde_json::Value,
@@ -91,6 +97,7 @@ async fn seed(
         .await
         .unwrap()
 }
+/// Read the scratch catalog together with its genuine native Version.
 async fn stored(
     documents: &dyn DocumentStore,
 ) -> tinystoragedrivers_core::Versioned<serde_json::Value> {
@@ -100,6 +107,7 @@ async fn stored(
         .unwrap()
         .unwrap()
 }
+/// Verify owning updates preserve complete catalogs, marker data, and sibling scopes.
 async fn catalog_operations(backend: Arc<dyn StorageBackend>) {
     let scoped = backend
         .for_scope(&Scope::new("catalog-alice").unwrap())
@@ -368,6 +376,7 @@ async fn catalog_counter_and_revision_exhaustion_refuse_without_mutation() {
         assert_eq!(after.doc, original);
     }
 }
+/// Synchronize after actual native reads and exercise genuine competing Version CAS.
 async fn concurrent_usage(backend: Arc<dyn StorageBackend>, same_operation: bool) {
     let scoped = backend
         .for_scope(&Scope::new("competing").unwrap())
@@ -480,6 +489,7 @@ async fn catalog_native_port_lost_ack_is_uncertain_and_not_retried() {
     expected["memes"]["memes"][0]["used"] = json!(5);
     assert_eq!(stored(scoped.documents().as_ref()).await.doc, expected);
 }
+/// Replace native lease metadata and verify snapshot reads do not authorize stale writes.
 async fn stale_catalog(backend: Arc<dyn StorageBackend>) {
     use tinystoragedrivers_core::{Fence, Filter};
     let guard = Scope::new("cluster").unwrap();
@@ -600,6 +610,7 @@ async fn catalog_selectors_are_rejected_before_any_native_read_or_write() {
     observed.assert_calls(0, 0);
 }
 
+/// Exercise removal and independent slang usage against one native conditional document.
 async fn removal_race(backend: Arc<dyn StorageBackend>) {
     let scoped = backend
         .for_scope(&Scope::new("remove-race").unwrap())

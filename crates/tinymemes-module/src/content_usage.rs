@@ -19,6 +19,7 @@ struct Catalog {
     memes: MemeSnapshot,
 }
 impl Catalog {
+    /// Represent an absent catalog without writing a default document.
     fn empty() -> Self {
         Self {
             format_version: 1,
@@ -27,6 +28,7 @@ impl Catalog {
             memes: MemeSnapshot::default(),
         }
     }
+    /// Accept only the exact owning envelope, preserving every field and duplicate.
     fn decode(original: serde_json::Value) -> Result<Self, ContentUsageFailure> {
         let catalog: Self = serde_json::from_value(original.clone())
             .map_err(|_| ContentUsageFailure::CorruptState)?;
@@ -41,6 +43,7 @@ impl Catalog {
         }
         Ok(catalog)
     }
+    /// Parse the canonical decimal business revision independently of native Version.
     fn revision(&self) -> Result<u64, ContentUsageFailure> {
         let revision = self
             .business_revision
@@ -56,9 +59,11 @@ impl Catalog {
 pub(crate) struct ContentUsageService {
     pub(crate) connection: tinybus::Connection,
 }
+/// Encode a content-free business refusal without backend source prose.
 fn failure(error: ContentUsageFailure) -> tinybus::Result<serde_json::Value> {
     Ok(serde_json::to_value(Result::<(), _>::Err(error))?)
 }
+/// Decode deny-unknown business arguments into the existing owning reducer operation.
 fn operation(
     member: &tinybus::MemberName,
     args: serde_json::Value,
