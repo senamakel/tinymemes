@@ -9,6 +9,10 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 license = "GPL-3.0-only"
+# Never published to crates.io: hosts (OpenHuman, Chottu) vendor it by path.
+# Saying so lets their supply-chain checks treat its path and git dependencies
+# as first-party instead of as wildcard registry requirements.
+publish = false
 description = "Reads a chat with Jev, rates how much fun a reply can take, and remixes it with slang and memes."
 repository = "https://github.com/tinyhumansai/tinymemes"
 readme = "README.md"
