@@ -467,11 +467,18 @@ async fn sqlite_stale_actor_refuses_without_replacement_grant() {
 
 // Interpose only scheduling over a real native port. All state and CAS remain
 // inside the native driver. Exactly two initial reads observe the same state.
+#[derive(Clone, Copy, Debug)]
+enum PutPolicy {
+    Conflicts(usize),
+    Refuse(tinystoragedrivers_core::ErrorKind),
+    LostAcknowledgment,
+}
 #[derive(Debug)]
 struct PairedReads {
     inner: Arc<dyn DocumentStore>,
     reads: std::sync::atomic::AtomicUsize,
     puts: std::sync::atomic::AtomicUsize,
+    policy: Option<PutPolicy>,
     barrier: Option<tokio::sync::Barrier>,
 }
 impl PairedReads {
@@ -480,6 +487,16 @@ impl PairedReads {
             inner,
             reads: std::sync::atomic::AtomicUsize::new(0),
             puts: std::sync::atomic::AtomicUsize::new(0),
+            policy: None,
+            barrier: None,
+        })
+    }
+    fn faulty(inner: Arc<dyn DocumentStore>, policy: PutPolicy) -> Arc<Self> {
+        Arc::new(Self {
+            inner,
+            reads: std::sync::atomic::AtomicUsize::new(0),
+            puts: std::sync::atomic::AtomicUsize::new(0),
+            policy: Some(policy),
             barrier: None,
         })
     }
@@ -531,7 +548,27 @@ impl DocumentStore for PairedReads {
         doc: serde_json::Value,
         condition: Precondition,
     ) -> tinystoragedrivers_core::Result<tinystoragedrivers_core::Version> {
-        self.puts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let ordinal = self.puts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        match self.policy {
+            Some(PutPolicy::Conflicts(count)) if ordinal < count => {
+                return Err(tinystoragedrivers_core::StorageError::conflict(
+                    "injected native conflict",
+                ));
+            }
+            Some(PutPolicy::Refuse(kind)) => {
+                return Err(tinystoragedrivers_core::StorageError::new(
+                    kind,
+                    "private backend cause",
+                ));
+            }
+            Some(PutPolicy::LostAcknowledgment) => {
+                self.inner.put(collection, id, doc, condition).await?;
+                return Err(tinystoragedrivers_core::StorageError::unavailable(
+                    "private lost acknowledgment",
+                ));
+            }
+            _ => {}
+        }
         self.inner.put(collection, id, doc, condition).await
     }
     async fn delete(
@@ -588,6 +625,7 @@ async fn competing_markers(backend: Arc<dyn StorageBackend>, same_id: bool) {
         inner: scoped.documents().clone(),
         reads: std::sync::atomic::AtomicUsize::new(0),
         puts: std::sync::atomic::AtomicUsize::new(0),
+        policy: None,
         barrier: Some(tokio::sync::Barrier::new(2)),
     });
     let first = Fixture::new(documents.clone()).await;
@@ -750,4 +788,141 @@ async fn sqlite_revision_max_preserves_duplicate_and_refuses_changed_state() {
             .unwrap(),
     ))
     .await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn native_conflicts_trigger_fresh_reads_before_eventual_commit() {
+    let backend = MemoryStorage::new();
+    let scoped = backend.for_scope(&Scope::new("retry").unwrap()).unwrap();
+    let observed = PairedReads::faulty(scoped.documents().clone(), PutPolicy::Conflicts(2));
+    let fixture = Fixture::new(observed.clone()).await;
+    assert_eq!(
+        fixture
+            .client()
+            .mark_remixed(request("reply"))
+            .await
+            .unwrap()
+            .unwrap(),
+        MarkRemixedReply {
+            changed: true,
+            business_revision: 1
+        }
+    );
+    observed.assert_calls(3, 3);
+    assert!(
+        scoped
+            .documents()
+            .get(COLLECTION, MARKER_DOCUMENT_KEY)
+            .await
+            .unwrap()
+            .is_some()
+    );
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn native_conflict_retries_have_an_exact_finite_bound() {
+    let backend = MemoryStorage::new();
+    let scoped = backend
+        .for_scope(&Scope::new("exhausted").unwrap())
+        .unwrap();
+    let observed =
+        PairedReads::faulty(scoped.documents().clone(), PutPolicy::Conflicts(usize::MAX));
+    let fixture = Fixture::new(observed.clone()).await;
+    assert_eq!(
+        fixture
+            .client()
+            .mark_remixed(request("reply"))
+            .await
+            .unwrap(),
+        Err(MarkerFailure::ConflictExhausted)
+    );
+    observed.assert_calls(8, 8);
+    assert!(
+        scoped
+            .documents()
+            .get(COLLECTION, MARKER_DOCUMENT_KEY)
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn non_conflict_native_errors_never_retry_or_expose_private_cause() {
+    use tinystoragedrivers_bus::StorageKind;
+    use tinystoragedrivers_core::ErrorKind;
+    for (index, (native, wire)) in [
+        (ErrorKind::Unsupported, StorageKind::Unsupported),
+        (ErrorKind::Fenced, StorageKind::Fenced),
+        (ErrorKind::Unavailable, StorageKind::Unavailable),
+        (ErrorKind::AlreadyExists, StorageKind::AlreadyExists),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let backend = MemoryStorage::new();
+        let scoped = backend
+            .for_scope(&Scope::new(format!("refused-{index}")).unwrap())
+            .unwrap();
+        let observed = PairedReads::faulty(scoped.documents().clone(), PutPolicy::Refuse(native));
+        let fixture = Fixture::new(observed.clone()).await;
+        let result = fixture
+            .client()
+            .mark_remixed(request("reply"))
+            .await
+            .unwrap();
+        assert_eq!(result, Err(MarkerFailure::Storage(wire)));
+        assert!(!serde_json::to_string(&result).unwrap().contains("private"));
+        observed.assert_calls(1, 1);
+        assert!(
+            scoped
+                .documents()
+                .get(COLLECTION, MARKER_DOCUMENT_KEY)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn lost_native_acknowledgment_does_not_retry_or_claim_rollback() {
+    let backend = MemoryStorage::new();
+    let scoped = backend
+        .for_scope(&Scope::new("uncertain").unwrap())
+        .unwrap();
+    let observed = PairedReads::faulty(scoped.documents().clone(), PutPolicy::LostAcknowledgment);
+    let fixture = Fixture::new(observed.clone()).await;
+    assert_eq!(
+        fixture
+            .client()
+            .mark_remixed(request("reply"))
+            .await
+            .unwrap(),
+        Err(MarkerFailure::Storage(
+            tinystoragedrivers_bus::StorageKind::Unavailable
+        ))
+    );
+    observed.assert_calls(1, 1);
+    let committed = scoped
+        .documents()
+        .get(COLLECTION, MARKER_DOCUMENT_KEY)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(committed.doc["remixed"], json!(["reply"]));
+    let duplicate = fixture
+        .client()
+        .mark_remixed(request("reply"))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!duplicate.changed);
+    assert_eq!(duplicate.business_revision, 1);
+    observed.assert_calls(2, 1);
+    let after = scoped
+        .documents()
+        .get(COLLECTION, MARKER_DOCUMENT_KEY)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(after.version, committed.version);
+    assert_eq!(after.doc, committed.doc);
 }
