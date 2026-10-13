@@ -2,7 +2,7 @@
 use std::collections::HashSet;
 use tinymemes_bus::{
     MARKER_DOCUMENT_KEY, MARKER_DOCUMENT_PATH, MARKER_INTERFACE, MarkRemixedReply, MarkerFailure,
-    MarkerRequest,
+    MarkerRequest, MarkerStorageKind,
 };
 use tinystoragedrivers_bus::{DocumentClient, GetRequest, Precondition, PutRequest, StorageKind};
 
@@ -45,6 +45,22 @@ impl Markers {
             return Err(MarkerFailure::CorruptState);
         }
         Ok(revision)
+    }
+}
+
+/// The contract's mirror of a native storage class (same wire form).
+fn marker_kind(kind: StorageKind) -> MarkerStorageKind {
+    match kind {
+        StorageKind::NotFound => MarkerStorageKind::NotFound,
+        StorageKind::Conflict => MarkerStorageKind::Conflict,
+        StorageKind::AlreadyExists => MarkerStorageKind::AlreadyExists,
+        StorageKind::Unsupported => MarkerStorageKind::Unsupported,
+        StorageKind::InvalidInput => MarkerStorageKind::InvalidInput,
+        StorageKind::Serialization => MarkerStorageKind::Serialization,
+        StorageKind::Crypto => MarkerStorageKind::Crypto,
+        StorageKind::Unavailable => MarkerStorageKind::Unavailable,
+        StorageKind::Backend => MarkerStorageKind::Backend,
+        StorageKind::Fenced => MarkerStorageKind::Fenced,
     }
 }
 
@@ -108,7 +124,7 @@ impl tinybus::Interface for PersistentService {
                 .await?
             {
                 Ok(document) => document,
-                Err(error) => return failure(MarkerFailure::Storage(error.kind)),
+                Err(error) => return failure(MarkerFailure::Storage(marker_kind(error.kind))),
             };
             let (markers, condition) = match document {
                 Some(document) => {
@@ -169,7 +185,7 @@ impl tinybus::Interface for PersistentService {
             {
                 Ok(_) => return Ok(serde_json::to_value(Result::<_, MarkerFailure>::Ok(reply))?),
                 Err(error) if error.kind == StorageKind::Conflict => continue,
-                Err(error) => return failure(MarkerFailure::Storage(error.kind)),
+                Err(error) => return failure(MarkerFailure::Storage(marker_kind(error.kind))),
             }
         }
         failure(MarkerFailure::ConflictExhausted)

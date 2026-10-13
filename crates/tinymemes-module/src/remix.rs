@@ -1,86 +1,38 @@
-//! The remix operation: engine adapters over [`Host`], timeout, drain, service.
+//! The remix operation: timeout, delivery, background research, drain, service.
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use tinymemes::decisions::{EvaluationRequest, EvaluationResponse};
-use tinymemes::{
-    BoxError, ChatModel, Evaluator, IndexPolicy, MemeEngine, MemeIndex, MemeIndexPolicy, Region,
-    Role, SearchHit, SearchResearcher, SlangIndex, Turn, WebSearch,
-};
+use tinymemes::{Role, Turn};
 use tinymemes_bus::{
-    CompleteRequest, DeliverRequest, IndexKind, REMIX_INTERFACE, RemixRefusal, RemixRequest,
-    RemixResponse, RemixResult, SearchRequest, SkipReason, WireRole, remix_methods,
+    DeliverRequest, REMIX_INTERFACE, RemixRefusal, RemixRequest, RemixResponse, RemixResult,
+    SkipReason, WireRole, remix_methods,
 };
 use tokio::sync::Notify;
 
+use crate::docs::Documents;
+use crate::engine::{self, Deps};
 use crate::host::{BusHost, SharedHost};
 
-struct HostModel(SharedHost);
-#[async_trait]
-impl ChatModel for HostModel {
-    async fn complete(&self, system: &str, user: &str) -> Result<String, BoxError> {
-        let request = CompleteRequest {
-            system: system.into(),
-            user: user.into(),
-        };
-        self.0
-            .complete(request)
-            .await
-            .map_err(|e| format!("host complete failed: {e:?}").into())
-    }
-}
+/// How long background research may run after the reply has gone out.
+const RESEARCH_BUDGET: Duration = Duration::from_secs(120);
 
-struct HostEvaluator(SharedHost);
-#[async_trait]
-impl Evaluator for HostEvaluator {
-    async fn evaluate(&self, request: &EvaluationRequest) -> Result<EvaluationResponse, BoxError> {
-        let body = serde_json::to_value(request)?;
-        let reply = self
-            .0
-            .evaluate(body)
-            .await
-            .map_err(|e| format!("host evaluate failed: {e:?}"))?;
-        Ok(serde_json::from_value(reply)?)
-    }
-}
-
-struct HostSearch(SharedHost);
-#[async_trait]
-impl WebSearch for HostSearch {
-    async fn search(&self, query: &str, max_results: usize) -> Result<Vec<SearchHit>, BoxError> {
-        let request = SearchRequest {
-            query: query.into(),
-            max_results: u32::try_from(max_results).unwrap_or(u32::MAX),
-        };
-        let hits = self
-            .0
-            .search(request)
-            .await
-            .map_err(|e| format!("host search failed: {e:?}"))?;
-        Ok(hits
-            .into_iter()
-            .map(|h| SearchHit {
-                title: h.title,
-                url: h.url,
-                snippet: h.snippet,
-            })
-            .collect())
-    }
-}
-
-fn turns(request: &RemixRequest) -> Vec<Turn> {
+fn turns(request: &RemixRequest, remixed_ids: &std::collections::VecDeque<String>) -> Vec<Turn> {
     request
         .conversation
         .iter()
-        .map(|t| Turn {
-            role: match t.role {
+        .map(|t| {
+            let role = match t.role {
                 WireRole::User => Role::User,
                 WireRole::Assistant => Role::Assistant,
-            },
-            text: t.text.clone(),
-            remixed: t.remixed,
+            };
+            let remembered = t.id.as_ref().is_some_and(|id| remixed_ids.contains(id));
+            Turn {
+                role,
+                text: t.text.clone(),
+                remixed: role == Role::Assistant && (t.remixed || remembered),
+            }
         })
         .collect()
 }
@@ -95,82 +47,200 @@ fn unchanged(reply: &str, reason: SkipReason) -> RemixResponse {
     }
 }
 
-async fn load<T>(
-    host: &SharedHost,
-    kind: IndexKind,
-    parse: impl Fn(&str) -> Option<T>,
-    fresh: impl Fn() -> T,
-) -> T {
-    match host.load_index(kind).await {
-        Ok(Some(json)) => parse(&json).unwrap_or_else(&fresh),
-        _ => fresh(),
-    }
-}
-
 /// Run one remix against `host`. Never errors: every failure returns the
 /// original reply with a content-free reason. Dropping the returned future
-/// cancels any in-flight host callback.
-pub(crate) async fn run(host: SharedHost, request: RemixRequest) -> RemixResponse {
+/// cancels any in-flight host callback. Research that the reply earned runs
+/// after this returns, under `drain`, and ends with the host's `End` callback.
+pub(crate) async fn run(
+    host: SharedHost,
+    drain: Arc<Drain>,
+    request: RemixRequest,
+) -> RemixResponse {
+    run_with(host, drain, request, Arc::new(Deps::production())).await
+}
+
+/// [`run`] over explicit [`Deps`].
+pub(crate) async fn run_with(
+    host: SharedHost,
+    drain: Arc<Drain>,
+    request: RemixRequest,
+    deps: Arc<Deps>,
+) -> RemixResponse {
     if !request.enabled {
         return unchanged(&request.reply, SkipReason::Disabled);
     }
     let budget = Duration::from_millis(request.timeout_ms);
-    let work = remix(host.clone(), &request);
+    let background = Background::default();
+    let work = remix(host.clone(), &drain, &request, &background, &deps);
     let response = match tokio::time::timeout(budget, work).await {
         Ok(response) => response,
         Err(_) => unchanged(&request.reply, SkipReason::Timeout),
     };
     if request.deliver {
         let delivery = DeliverRequest {
+            correlation: String::new(),
             reply: response.reply.clone(),
             remixed: response.remixed,
         };
         // Delivery is the host's; its failure cannot change the reply.
         let _ = tokio::time::timeout(budget, host.deliver(delivery)).await;
     }
+    if background.is_empty() {
+        // Nothing runs on: tell the host it can forget this request.
+        let _ = tokio::time::timeout(budget, host.end()).await;
+    } else {
+        background.spawn_end(host, drain);
+    }
     response
 }
 
-async fn remix(host: SharedHost, request: &RemixRequest) -> RemixResponse {
-    let slang = Arc::new(
-        load(
-            &host,
-            IndexKind::Slang,
-            |j| SlangIndex::from_json(j, IndexPolicy::default()).ok(),
-            || SlangIndex::new(IndexPolicy::default()),
-        )
-        .await,
+/// Background research started for one request. `End` is sent when the last
+/// task is done.
+#[derive(Default)]
+struct Background {
+    tasks: std::sync::Mutex<Vec<tokio::task::JoinHandle<()>>>,
+}
+
+impl Background {
+    fn is_empty(&self) -> bool {
+        self.tasks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_empty()
+    }
+    fn add(&self, task: tokio::task::JoinHandle<()>) {
+        self.tasks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(task);
+    }
+    fn spawn_end(&self, host: SharedHost, drain: Arc<Drain>) {
+        let tasks = std::mem::take(&mut *self.tasks.lock().unwrap_or_else(|e| e.into_inner()));
+        let Some(permit) = drain.admit() else { return };
+        tokio::spawn(async move {
+            let _permit = permit;
+            for task in tasks {
+                let _ = task.await;
+            }
+            let _ = tokio::time::timeout(RESEARCH_BUDGET, host.end()).await;
+        });
+    }
+}
+
+async fn remix(
+    host: SharedHost,
+    drain: &Arc<Drain>,
+    request: &RemixRequest,
+    background: &Background,
+    deps: &Deps,
+) -> RemixResponse {
+    let docs = Arc::new(Documents::fetch(&host).await);
+    let ids = docs.remixed_ids();
+    let built = engine::build(
+        &host,
+        request,
+        deps,
+        tinymemes::IndexStore::load_slang(docs.as_ref()),
+        tinymemes::IndexStore::load_memes(docs.as_ref()),
     );
-    let memes = Arc::new(
-        load(
-            &host,
-            IndexKind::Memes,
-            |j| MemeIndex::from_json(j, MemeIndexPolicy::default()).ok(),
-            || MemeIndex::new(MemeIndexPolicy::default()),
-        )
-        .await,
-    );
-    let model: Arc<dyn ChatModel> = Arc::new(HostModel(host.clone()));
-    let region = match request.region.as_deref() {
-        Some(code) if code.eq_ignore_ascii_case("global") => Region::global(),
-        _ => Region::default(),
-    };
-    let engine = MemeEngine::builder(Arc::new(HostEvaluator(host.clone())), model.clone())
-        .region(region)
-        .slang_index(slang.clone())
-        .meme_index(memes.clone())
-        .researcher(Arc::new(SearchResearcher::new(
-            Arc::new(HostSearch(host.clone())),
-            model,
-        )))
-        .source(Arc::new(tinymemes::source::Imgflip::new(reqwest_client())))
-        .build();
-    let outcome = engine.process(&turns(request), &request.reply).await;
+    let engine = Arc::new(built.engine);
+    let conversation = turns(request, &ids);
+    let outcome = engine.process(&conversation, &request.reply).await;
     let remixed = outcome.remix.is_some() && outcome.reply != request.reply;
+
+    // Slang research, off the critical path, only for a reply that was
+    // actually remixed and only when Jev judged the index short of slang.
+    if let (Some(reading), true) = (&outcome.reading, remixed) {
+        let policy = built.slang.policy();
+        if reading.wants_more_slang(policy.search_below)
+            && let Some(permit) = drain.admit()
+        {
+            let (engine, host, docs, slang) = (
+                engine.clone(),
+                host.clone(),
+                docs.clone(),
+                built.slang.clone(),
+            );
+            let (intent, reply, correlation) = (
+                reading.reply_intent,
+                request.reply.clone(),
+                request.correlation.clone(),
+            );
+            background.add(tokio::spawn(async move {
+                let _permit = permit;
+                let research =
+                    tokio::time::timeout(RESEARCH_BUDGET, engine.learn_for_reply(intent, &reply));
+                match research.await {
+                    Ok(Ok(Some(r))) => tracing::info!(
+                        correlation = %correlation, added = r.added, corroborated = r.corroborated,
+                        rejected = r.rejected, failed_jev = r.failed_verification,
+                        "[tinymemes] slang research"
+                    ),
+                    Ok(Ok(None)) => {
+                        tracing::debug!("[tinymemes] slang research skipped (repeat or budget)")
+                    }
+                    Ok(Err(e)) => tracing::warn!(error = %e, "[tinymemes] slang research failed"),
+                    Err(_) => tracing::warn!("[tinymemes] slang research timed out"),
+                }
+                let _ = tinymemes::IndexStore::save_slang(docs.as_ref(), &slang);
+                docs.flush(&host).await;
+            }));
+        }
+    }
+
+    // Meme research, off the critical path: a meme was allowed but nothing in
+    // the catalog fit. New GIFs are vetted before Jev can pick them.
+    if outcome.wants_more_memes()
+        && let (Some(reading), Some(permit)) = (&outcome.reading, drain.admit())
+    {
+        let (engine, host, docs, memes) = (
+            engine.clone(),
+            host.clone(),
+            docs.clone(),
+            built.memes.clone(),
+        );
+        let intent = reading.reply_intent;
+        let correlation = request.correlation.clone();
+        // Only a short, generic meme concept derived from this is searched.
+        let moment = request
+            .conversation
+            .iter()
+            .rev()
+            .find(|t| t.role == WireRole::User)
+            .map(|t| t.text.clone())
+            .unwrap_or_default();
+        background.add(tokio::spawn(async move {
+            let _permit = permit;
+            let research =
+                tokio::time::timeout(RESEARCH_BUDGET, engine.learn_memes(intent, &moment));
+            match research.await {
+                // The query is derived from the user's message, so only
+                // counters are logged.
+                Ok(Ok(Some(r))) => tracing::info!(
+                    correlation = %correlation, found = r.found, added = r.added,
+                    rejected_rating = r.rejected_rating, rejected_topic = r.rejected_topic,
+                    duplicates = r.duplicates, failed_jev = r.failed_verification,
+                    "[tinymemes] meme research"
+                ),
+                Ok(Ok(None)) => {
+                    tracing::debug!("[tinymemes] meme research skipped (repeat, budget, or busy)")
+                }
+                Ok(Err(e)) => tracing::warn!(error = %e, "[tinymemes] meme research failed"),
+                Err(_) => tracing::warn!("[tinymemes] meme research timed out"),
+            }
+            let _ = tinymemes::IndexStore::save_memes(docs.as_ref(), &memes);
+            docs.flush(&host).await;
+        }));
+    }
+
     if remixed || outcome.learned.is_some() {
         // Best effort: a lost save only loses usage counts.
-        let _ = host.save_index(IndexKind::Slang, slang.to_json()).await;
-        let _ = host.save_index(IndexKind::Memes, memes.to_json()).await;
+        let _ = tinymemes::IndexStore::save_slang(docs.as_ref(), &built.slang);
+        let _ = tinymemes::IndexStore::save_memes(docs.as_ref(), &built.memes);
+        docs.flush(&host).await;
+    }
+    if remixed && let Some(id) = request.reply_id.clone() {
+        Documents::mark_remixed(&host, id).await;
     }
     let skipped = match (&outcome.skipped, remixed) {
         (_, true) => None,
@@ -184,10 +254,6 @@ async fn remix(host: SharedHost, request: &RemixRequest) -> RemixResponse {
         remixed,
         skipped,
     }
-}
-
-fn reqwest_client() -> reqwest::Client {
-    reqwest::Client::new()
 }
 
 /// Counts in-flight remixes so a close can wait for them and refuse new work.
@@ -293,8 +359,8 @@ impl tinybus::Interface for RemixService {
             tinymemes_bus::HOST_PATH,
             tinymemes_bus::HOST_INTERFACE,
         )?;
-        let host: SharedHost = Arc::new(BusHost(proxy));
-        encode(Ok(run(host, request).await))
+        let host: SharedHost = Arc::new(BusHost::new(proxy, request.correlation.clone()));
+        encode(Ok(run(host, self.drain.clone(), request).await))
     }
 }
 

@@ -6,7 +6,8 @@ rust-version = "1.88"
 publish = false
 
 [dependencies]
-tinymemes-bus = { path = "../../../crates/tinymemes-bus", features = ["host-callback"] }
+tinymemes-bus = { path = "../../../crates/tinymemes-bus" }
+tinymemes-client = { path = "../../../crates/tinymemes-client", features = ["host-callback"] }
 tinybus = { git = "https://github.com/tinyhumansai/tinybus", rev = "1f2557657db97470cd4efb7e1fc2f374f36fdd22", default-features = false, features = ["modules"] }
 tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "7c5596f37e5d5440fbfa3a049a3ca98571885584" }
 tinystoragedrivers-core = { git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "7c5596f37e5d5440fbfa3a049a3ca98571885584" }

@@ -1,6 +1,11 @@
 //! Stateless content module. Configuration cannot admit a backend or profile.
 use tinymemes_bus::{STATE_INTERFACE, STATE_PATH};
 
+/// Bus name the module claims.
+pub const BUS_NAME: &str = STATE_INTERFACE;
+
+mod docs;
+mod engine;
 mod host;
 mod persistent;
 mod remix;
@@ -14,7 +19,7 @@ impl tinybus::service::Interface for ContentService {
     }
     /// List the entire callable surface; no configuration grants extra methods.
     fn members(&self) -> Vec<tinybus::MemberName> {
-        vec!["Apply".try_into().unwrap()]
+        vec![tinymemes_bus::APPLY_METHOD.try_into().unwrap()]
     }
     /// Decode positional arguments and invoke owning pure operations with fixed errors.
     async fn call(
@@ -56,24 +61,34 @@ async fn setup(connection: tinybus::Connection) -> tinybus::Result<()> {
     connection.request_name(STATE_INTERFACE).await?;
     Ok(())
 }
-mod exports {
+macro_rules! module_declaration {
+    ($export:ident) => {
+        tinybus_module::$export! {
+            setup = setup,
+            worker_threads = 1,
+            provides = ["ai.tinyhumans.tinymemes.ContentState", "ai.tinyhumans.tinymemes.RemixMarkers1"],
+            methods = ["Apply", "MarkRemixed", "WasRemixed", "Remix"], signals = [], requires = [], optional = ["ai.tinyhumans.tinymemes.Host"], lazy = false,
+        }
+    };
+}
+
+/// The exported entry points. The default build exports the shared C names a
+/// dynamic loader resolves; `static-link` (and unit tests) export Rust entry
+/// points instead, so a host can link the module and admit it in-process.
+#[allow(missing_docs, unreachable_pub)]
+pub mod exports {
     use super::setup;
+
     #[cfg(not(test))]
-    tinybus_module::module_export! {
-        setup = setup,
-        worker_threads = 1,
-        provides = ["ai.tinyhumans.tinymemes.ContentState", "ai.tinyhumans.tinymemes.RemixMarkers1"],
-        methods = ["Apply", "MarkRemixed", "WasRemixed", "Remix"], signals = [], requires = [], optional = ["ai.tinyhumans.tinymemes.Host"], lazy = false,
-    }
+    module_declaration!(module_export_optional_static);
 
     #[cfg(test)]
-    tinybus_module::module_export_static! {
-        setup = setup,
-        worker_threads = 1,
-        provides = ["ai.tinyhumans.tinymemes.ContentState", "ai.tinyhumans.tinymemes.RemixMarkers1"],
-        methods = ["Apply", "MarkRemixed", "WasRemixed", "Remix"], signals = [], requires = [], optional = ["ai.tinyhumans.tinymemes.Host"], lazy = false,
-    }
+    module_declaration!(module_export_static);
 }
+
+/// Entry points and parsed manifest for a host that links this module.
+#[cfg(any(test, feature = "static-link"))]
+pub use exports::linked_module;
 
 #[cfg(test)]
 #[path = "lib_tests.rs"]

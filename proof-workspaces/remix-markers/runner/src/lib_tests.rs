@@ -7,6 +7,7 @@ use tinybus::{
     transport::memory::MemoryBus,
 };
 use tinymemes_bus::*;
+use tinymemes_client::RemixMarkerClient;
 use tinystoragedrivers_core::{DocumentStore, MemoryStorage, Precondition, Scope, StorageBackend};
 use tinystoragedrivers_tinybus::{endpoint, serve_collection};
 
@@ -438,7 +439,7 @@ async fn stale_actor(backend: Arc<dyn StorageBackend>) {
             .await
             .unwrap()
             .unwrap_err(),
-        MarkerFailure::Storage(tinystoragedrivers_bus::StorageKind::Fenced)
+        MarkerFailure::Storage(MarkerStorageKind::Fenced)
     );
     observed.assert_calls(1, 1);
     let after = unguarded
@@ -869,7 +870,7 @@ async fn non_conflict_native_errors_never_retry_or_expose_private_cause() {
             .mark_remixed(request("reply"))
             .await
             .unwrap();
-        assert_eq!(result, Err(MarkerFailure::Storage(wire)));
+        assert_eq!(result, Err(MarkerFailure::Storage(marker_kind(wire))));
         assert!(!serde_json::to_string(&result).unwrap().contains("private"));
         observed.assert_calls(1, 1);
         assert!(
@@ -896,9 +897,7 @@ async fn lost_native_acknowledgment_does_not_retry_or_claim_rollback() {
             .mark_remixed(request("reply"))
             .await
             .unwrap(),
-        Err(MarkerFailure::Storage(
-            tinystoragedrivers_bus::StorageKind::Unavailable
-        ))
+        Err(MarkerFailure::Storage(MarkerStorageKind::Unavailable))
     );
     observed.assert_calls(1, 1);
     let committed = scoped
@@ -925,4 +924,9 @@ async fn lost_native_acknowledgment_does_not_retry_or_claim_rollback() {
         .unwrap();
     assert_eq!(after.version, committed.version);
     assert_eq!(after.doc, committed.doc);
+}
+
+/// The contract's storage class for a native one: same snake_case wire form.
+fn marker_kind(kind: tinystoragedrivers_bus::StorageKind) -> MarkerStorageKind {
+    serde_json::from_value(serde_json::to_value(kind).unwrap()).unwrap()
 }

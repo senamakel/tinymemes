@@ -1,6 +1,7 @@
 //! Load the separately built cdylib using only the minimal contract.
 use tinybus::{Connection, broker::Broker, module::ModuleHost, transport::memory::MemoryBus};
-use tinymemes_bus::{ApplyRequest, ContentError, ContentOperation, ContentState, StateClient};
+use tinymemes_bus::{ApplyRequest, ContentError, ContentOperation, ContentState};
+use tinymemes_client::StateClient;
 
 /// Load a real cdylib and exercise its typed content operations and refusals.
 #[tokio::main]

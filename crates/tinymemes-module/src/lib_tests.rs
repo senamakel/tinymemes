@@ -1,6 +1,7 @@
 use super::*;
 use tinybus::{Connection, broker::Broker, module::ModuleHost, transport::memory::MemoryBus};
-use tinymemes_bus::{ApplyRequest, ContentError, ContentOperation, ContentState, StateClient};
+use tinymemes_bus::{ApplyRequest, ContentError, ContentOperation, ContentState};
+use tinymemes_client::StateClient;
 
 #[tokio::test]
 async fn compiled_abi_returns_typed_content_and_conflicts_without_retaining_caller_state() {

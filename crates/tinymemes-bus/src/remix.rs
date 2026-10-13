@@ -17,7 +17,10 @@ pub const HOST_PATH: &str = "/ai/tinyhumans/tinymemes/Host";
 
 /// The contract version. Bump the minor for an additive member or field and
 /// the major for anything a bound peer could misread.
-pub const CONTRACT_VERSION: (u32, u32) = (1, 0);
+///
+/// 1.1 adds the per-request `correlation` id carried by every host callback,
+/// the `End` callback, `RemixOptions`, turn/reply ids and `IndexKind::Remixed`.
+pub const CONTRACT_VERSION: (u32, u32) = (1, 1);
 
 /// Whether a host built against [`CONTRACT_VERSION`] can bind to `module`.
 #[must_use]
@@ -45,6 +48,9 @@ pub mod host_methods {
     pub const SAVE_INDEX: &str = "SaveIndex";
     /// Hand the final reply to the host for delivery.
     pub const DELIVER: &str = "Deliver";
+    /// The module is finished with a request, background research included;
+    /// the host may drop everything it kept for that correlation id.
+    pub const END: &str = "End";
 }
 
 /// Every member of [`REMIX_INTERFACE`].
@@ -57,6 +63,7 @@ pub const HOST_METHODS: &[&str] = &[
     host_methods::LOAD_INDEX,
     host_methods::SAVE_INDEX,
     host_methods::DELIVER,
+    host_methods::END,
 ];
 
 /// Who wrote a conversation turn.
@@ -79,6 +86,10 @@ pub struct WireTurn {
     /// True for an assistant turn already delivered remixed.
     #[serde(default)]
     pub remixed: bool,
+    /// The host's stable id of this message. The module tags an assistant turn
+    /// remixed when the id is in the ring of ids it remembers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
 }
 
 fn yes() -> bool {
@@ -86,6 +97,28 @@ fn yes() -> bool {
 }
 fn default_timeout_ms() -> u64 {
     60_000
+}
+
+/// Per-request knobs the host decides; everything else is the module's.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct RemixOptions {
+    /// No meme when one went out in this many most recent assistant replies;
+    /// `None` keeps the module's default, `Some(0)` disables the cooldown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub meme_cooldown_turns: Option<u32>,
+    /// The host can serve `Search`. `false` skips web research that would only
+    /// fail; the default is `true`.
+    #[serde(default = "yes")]
+    pub research: bool,
+}
+
+impl Default for RemixOptions {
+    fn default() -> Self {
+        Self {
+            meme_cooldown_turns: None,
+            research: true,
+        }
+    }
 }
 
 /// Remix one reply. The host decides whether to call at all (off, control and
@@ -109,6 +142,18 @@ pub struct RemixRequest {
     /// Hand the final reply to the host through `Deliver` before returning.
     #[serde(default)]
     pub deliver: bool,
+    /// Unique id of this request. The module echoes it on every host callback
+    /// (including those made by background research after this call returns)
+    /// so the host can serve concurrent remixes for different scopes.
+    #[serde(default)]
+    pub correlation: String,
+    /// The host's id for the reply being produced. When the reply is delivered
+    /// remixed, the module remembers it so later requests tag that turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reply_id: Option<String>,
+    /// Host-decided knobs.
+    #[serde(default)]
+    pub options: RemixOptions,
 }
 
 /// What happened to the reply.
@@ -161,6 +206,9 @@ pub type HostResult<T> = Result<T, HostFailure>;
 /// `Complete` argument.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct CompleteRequest {
+    /// Correlation id of the remix this call belongs to.
+    #[serde(default)]
+    pub correlation: String,
     /// System prompt.
     pub system: String,
     /// User prompt.
@@ -171,6 +219,9 @@ pub struct CompleteRequest {
 /// in the shape of `tinyinference-decisions`, so this crate links neither.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct EvaluateEnvelope {
+    /// Correlation id of the remix this call belongs to (empty in a reply).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub correlation: String,
     /// The request or response body.
     pub body: serde_json::Value,
 }
@@ -178,6 +229,9 @@ pub struct EvaluateEnvelope {
 /// `Search` argument.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct SearchRequest {
+    /// Correlation id of the remix this call belongs to.
+    #[serde(default)]
+    pub correlation: String,
     /// Query text.
     pub query: String,
     /// Most results wanted.
@@ -205,11 +259,16 @@ pub enum IndexKind {
     Slang,
     /// The learned-meme index.
     Memes,
+    /// The ring of remixed message ids (a JSON array of strings, newest last).
+    Remixed,
 }
 
 /// `LoadIndex` argument.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct LoadIndexRequest {
+    /// Correlation id of the remix this call belongs to.
+    #[serde(default)]
+    pub correlation: String,
     /// Which document.
     pub kind: IndexKind,
 }
@@ -217,6 +276,9 @@ pub struct LoadIndexRequest {
 /// `SaveIndex` argument.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct SaveIndexRequest {
+    /// Correlation id of the remix this call belongs to.
+    #[serde(default)]
+    pub correlation: String,
     /// Which document.
     pub kind: IndexKind,
     /// The index snapshot, as JSON text.
@@ -226,10 +288,20 @@ pub struct SaveIndexRequest {
 /// `Deliver` argument: the final reply.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct DeliverRequest {
+    /// Correlation id of the remix this call belongs to.
+    #[serde(default)]
+    pub correlation: String,
     /// Text to deliver.
     pub reply: String,
     /// Whether it is the remixed text.
     pub remixed: bool,
+}
+
+/// `End` argument.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub struct EndRequest {
+    /// Correlation id of the finished remix.
+    pub correlation: String,
 }
 
 /// Transport-level view of a remix call: `Err` is the module refusing the
