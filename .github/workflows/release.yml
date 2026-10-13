@@ -110,6 +110,10 @@ jobs:
           perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' crates/tinymemes-bus/Cargo.toml
           perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' crates/tinymemes-client/Cargo.toml
           cargo update --workspace --offline
+          # The proof workspace depends on the bumped crates by path; keep its
+          # lock in step so `--locked` runs after the release still resolve.
+          cargo update --manifest-path proof-workspaces/remix-markers/Cargo.toml \
+            -p tinymemes-bus -p tinymemes-client || true
 
       - name: Commit version bump and tag
         env:
@@ -119,7 +123,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Cargo.toml Cargo.lock crates/tinymemes-module/Cargo.toml \
-            crates/tinymemes-bus/Cargo.toml crates/tinymemes-client/Cargo.toml
+            crates/tinymemes-bus/Cargo.toml crates/tinymemes-client/Cargo.toml \
+            proof-workspaces/remix-markers/Cargo.lock
           git commit -m "Release ${RELEASE_TAG}"
           git tag -a "${RELEASE_TAG}" -m "Release ${RELEASE_TAG}"
 

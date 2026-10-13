@@ -161,7 +161,10 @@ async fn remix(
     let engine = Arc::new(built.engine);
     let conversation = turns(request, &ids);
     let outcome = engine.process(&conversation, &request.reply).await;
-    let remixed = outcome.remix.is_some() && outcome.reply != request.reply;
+    // The same criterion the host applies before it swaps the text: a rewrite
+    // that differs only in surrounding whitespace is the original reply, so it
+    // must neither be reported as remixed nor remembered as such.
+    let remixed = outcome.remix.is_some() && outcome.reply.trim() != request.reply.trim();
 
     // Slang research, off the critical path, only for a reply that was
     // actually remixed and only when Jev judged the index short of slang.
@@ -265,7 +268,11 @@ async fn remix(
     let response = RemixResponse {
         wants_more_memes: outcome.wants_more_memes(),
         score: outcome.rating.map(|r| r.score),
-        reply: outcome.reply,
+        reply: if remixed {
+            outcome.reply
+        } else {
+            request.reply.clone()
+        },
         remixed,
         skipped,
     };
