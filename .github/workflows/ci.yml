@@ -31,4 +31,4 @@ jobs:
       - name: Execute authenticated persistent markers against native ports
         run: scripts/test-remix-markers.sh
       - run: cargo fmt --manifest-path proof-workspaces/remix-markers/Cargo.toml -- --check
-      - run: cargo clippy --manifest-path proof-workspaces/remix-markers/Cargo.toml --all-targets --locked -- -D warnings
+      - run: cargo clippy --manifest-path proof-workspaces/remix-markers/Cargo.toml --all-targets -- -D warnings
