@@ -32,6 +32,7 @@ struct Mock {
     states: Mutex<Vec<serde_json::Value>>,
     ended: Notify,
     hang_delivery: AtomicBool,
+    rewrite: Mutex<Option<String>>,
     dropped: Arc<AtomicBool>,
 }
 
@@ -52,6 +53,7 @@ impl Mock {
             states: Mutex::new(Vec::new()),
             ended: Notify::new(),
             hang_delivery: AtomicBool::new(false),
+            rewrite: Mutex::new(None),
             dropped: Arc::default(),
         })
     }
@@ -129,6 +131,9 @@ impl Host for Mock {
     async fn complete(&self, _: CompleteRequest) -> HostResult<String> {
         self.note("complete");
         match self.eval {
+            Eval::Script { .. } if self.rewrite.lock().unwrap().is_some() => {
+                Ok(self.rewrite.lock().unwrap().clone().unwrap())
+            }
             Eval::Script { .. } => Ok(
                 "W release fr 🎉\n[[meme:1]]\nTagged `v1.4.0` — notes at https://example.com/r"
                     .into(),
@@ -568,4 +573,25 @@ async fn a_cancelled_call_leaves_no_research_running() {
         "research must not outlive a cancelled call"
     );
     assert_eq!(host.count("end"), 0);
+}
+
+#[tokio::test]
+async fn a_rewrite_that_only_adds_whitespace_is_not_a_remix() {
+    let host = Mock::new(frank());
+    let original = "Done. Tagged `v1.4.0`; release notes are at https://example.com/r.";
+    // The engine trims what it returns, so a reply with trailing whitespace
+    // comes back different from the request byte for byte, but not in content.
+    *host.rewrite.lock().unwrap() = Some(original.into());
+    let mut req = request();
+    req.reply = format!("{original}\n\n");
+    req.reply_id = Some("run-ws:reply".into());
+    let req_reply = req.reply.clone();
+    let out = run(host.clone(), req).await;
+    assert!(!out.remixed, "{out:?}");
+    assert_eq!(out.reply, req_reply, "the original comes back untouched");
+    assert_eq!(
+        host.doc("remixed"),
+        None,
+        "an unchanged reply is not remembered as remixed"
+    );
 }
