@@ -26,7 +26,7 @@ jobs:
           RUSTDOCFLAGS: -D warnings
       - run: cargo build -p tinymemes-module
       - name: Execute the compiled module through its minimal contract
-        run: cargo run -p tinymemes-bus --example compiled_state -- target/debug/libtinymemes_module.so
+        run: cargo run -p tinymemes-client --example compiled_state -- target/debug/libtinymemes_module.so
 
       - name: Execute authenticated persistent markers against native ports
         run: scripts/test-remix-markers.sh

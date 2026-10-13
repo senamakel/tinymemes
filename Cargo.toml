@@ -1,6 +1,6 @@
 [workspace]
 exclude = ["proof-workspaces/remix-markers"]
-members = [".", "crates/tinymemes-bus", "crates/tinymemes-module"]
+members = [".", "crates/tinymemes-bus", "crates/tinymemes-client", "crates/tinymemes-module"]
 resolver = "2"
 
 [package]

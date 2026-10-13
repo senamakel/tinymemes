@@ -6,12 +6,43 @@ fn request_defaults_enable_remix_with_a_budget() {
     assert!(r.enabled && !r.deliver);
     assert_eq!(r.timeout_ms, 60_000);
     assert_eq!(r.region, None);
+    assert_eq!(r.correlation, "");
+    assert_eq!(r.reply_id, None);
+    assert_eq!(
+        r.options,
+        RemixOptions {
+            meme_cooldown_turns: None,
+            research: true
+        }
+    );
+}
+
+#[test]
+fn a_one_zero_peer_payload_still_decodes_without_correlation_fields() {
+    let c: CompleteRequest = serde_json::from_str(r#"{"system":"s","user":"u"}"#).unwrap();
+    assert_eq!(c.correlation, "");
+    let t: WireTurn = serde_json::from_str(r#"{"role":"user","text":"hi"}"#).unwrap();
+    assert_eq!(t.id, None);
+    let l: LoadIndexRequest = serde_json::from_str(r#"{"kind":"remixed"}"#).unwrap();
+    assert_eq!(l.kind, IndexKind::Remixed);
+}
+
+#[test]
+fn bus_contract_depends_on_no_bus_or_storage_crate() {
+    let manifest = include_str!("../Cargo.toml");
+    for forbidden in ["tinybus", "tinystoragedrivers", "tokio", "reqwest"] {
+        assert!(
+            !manifest.contains(forbidden),
+            "{forbidden} must not be a dependency"
+        );
+    }
 }
 
 #[test]
 fn member_tables_match_constants_and_names_are_distinct() {
     assert_eq!(REMIX_METHODS, &["Remix"]);
-    assert_eq!(HOST_METHODS.len(), 6);
+    assert_eq!(HOST_METHODS.len(), 7);
+    assert!(HOST_METHODS.contains(&host_methods::END));
     assert!(HOST_METHODS.contains(&host_methods::DELIVER));
     assert_ne!(REMIX_INTERFACE, HOST_INTERFACE);
     assert_ne!(REMIX_PATH, HOST_PATH);
