@@ -691,7 +691,7 @@ dependencies = [
 
 [[package]]
 name = "tinymemes-bus"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -699,7 +699,7 @@ dependencies = [
 
 [[package]]
 name = "tinymemes-client"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "tinybus 0.1.4 (git+https://github.com/tinyhumansai/tinybus?rev=1f2557657db97470cd4efb7e1fc2f374f36fdd22)",
  "tinymemes-bus",
