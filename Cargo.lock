@@ -1232,6 +1232,7 @@ name = "tinymemes-module"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "reqwest",
  "serde",
  "serde_json",
  "tinybus 0.1.4 (git+https://github.com/tinyhumansai/tinybus?rev=1f2557657db97470cd4efb7e1fc2f374f36fdd22)",
@@ -1240,6 +1241,7 @@ dependencies = [
  "tinymemes-bus",
  "tinystoragedrivers-bus",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

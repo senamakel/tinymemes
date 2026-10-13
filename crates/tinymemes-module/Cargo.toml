@@ -12,11 +12,14 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "7c5596f37e5d5440fbfa3a049a3ca98571885584" }
-tinymemes = { path = "../..", version = "0.1.0" }
-tinymemes-bus = { path = "../tinymemes-bus", version = "0.1.0" }
+tinymemes = { path = "../.." }
+tinymemes-bus = { path = "../tinymemes-bus" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 async-trait = "0.1"
+tracing = "0.1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+tokio = { version = "1", features = ["sync", "time"] }
 tinybus = { git = "https://github.com/tinyhumansai/tinybus", rev = "1f2557657db97470cd4efb7e1fc2f374f36fdd22", default-features = false }
 tinybus-module = { git = "https://github.com/tinyhumansai/tinybus", rev = "1f2557657db97470cd4efb7e1fc2f374f36fdd22" }
 
