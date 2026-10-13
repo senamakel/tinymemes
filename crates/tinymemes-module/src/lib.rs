@@ -1,7 +1,9 @@
 //! Stateless content module. Configuration cannot admit a backend or profile.
 use tinymemes_bus::{STATE_INTERFACE, STATE_PATH};
 
+mod host;
 mod persistent;
+mod remix;
 
 struct ContentService;
 #[async_trait::async_trait]
@@ -42,6 +44,15 @@ async fn setup(connection: tinybus::Connection) -> tinybus::Result<()> {
             },
         )
         .await?;
+    connection
+        .serve_at(
+            tinymemes_bus::REMIX_PATH.try_into()?,
+            remix::RemixService {
+                connection: connection.clone(),
+                drain: Default::default(),
+            },
+        )
+        .await?;
     connection.request_name(STATE_INTERFACE).await?;
     Ok(())
 }
@@ -52,7 +63,7 @@ mod exports {
         setup = setup,
         worker_threads = 1,
         provides = ["ai.tinyhumans.tinymemes.ContentState", "ai.tinyhumans.tinymemes.RemixMarkers1"],
-        methods = ["Apply", "MarkRemixed", "WasRemixed"], signals = [], requires = [], optional = [], lazy = false,
+        methods = ["Apply", "MarkRemixed", "WasRemixed", "Remix"], signals = [], requires = [], optional = ["ai.tinyhumans.tinymemes.Host"], lazy = false,
     }
 
     #[cfg(test)]
@@ -60,7 +71,7 @@ mod exports {
         setup = setup,
         worker_threads = 1,
         provides = ["ai.tinyhumans.tinymemes.ContentState", "ai.tinyhumans.tinymemes.RemixMarkers1"],
-        methods = ["Apply", "MarkRemixed", "WasRemixed"], signals = [], requires = [], optional = [], lazy = false,
+        methods = ["Apply", "MarkRemixed", "WasRemixed", "Remix"], signals = [], requires = [], optional = ["ai.tinyhumans.tinymemes.Host"], lazy = false,
     }
 }
 

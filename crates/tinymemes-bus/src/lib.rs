@@ -6,10 +6,12 @@ mod persistent;
 pub use persistent::*;
 mod intent;
 mod records;
+mod remix;
 mod state;
 mod tier;
 pub use intent::Intent;
 pub use records::*;
+pub use remix::*;
 pub use state::*;
 pub use tier::Tier;
 
@@ -34,6 +36,32 @@ impl StateClient {
     /// refusal from a bus/ABI transport failure. No state is persisted.
     pub async fn apply(&self, request: ApplyRequest) -> tinybus::Result<ApplyResult> {
         self.0.call("Apply", (request,)).await
+    }
+}
+
+/// Typed proxy for the remix service.
+#[derive(Clone)]
+pub struct RemixClient(tinybus::Proxy);
+impl RemixClient {
+    /// Bind a connection to the remix service.
+    pub fn new(connection: &tinybus::Connection) -> tinybus::Result<Self> {
+        // The module claims one bus name (the content service's); the remix
+        // interface is served at its own path on that peer.
+        Ok(Self(connection.proxy(
+            STATE_INTERFACE,
+            REMIX_PATH,
+            REMIX_INTERFACE,
+        )?))
+    }
+    /// Remix one reply. The host must serve [`HOST_INTERFACE`] meanwhile.
+    pub async fn remix(&self, request: RemixRequest) -> tinybus::Result<RemixResult> {
+        self.0.call(remix_methods::REMIX, (request,)).await
+    }
+}
+
+impl std::fmt::Debug for RemixClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RemixClient").finish_non_exhaustive()
     }
 }
 

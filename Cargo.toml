@@ -20,7 +20,7 @@ keywords = ["memes", "llm", "openhuman", "jev", "chat"]
 categories = ["text-processing"]
 
 [dependencies]
-tinymemes-bus = { path = "crates/tinymemes-bus", version = "0.1.0" }
+tinymemes-bus = { path = "crates/tinymemes-bus" }
 async-trait = "0.1"
 futures = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
