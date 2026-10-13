@@ -70,11 +70,10 @@ pub(crate) async fn run_with(
         return unchanged(&request.reply, SkipReason::Disabled);
     }
     let budget = Duration::from_millis(request.timeout_ms);
-    let background = Background::default();
-    let work = remix(host.clone(), &drain, &request, &background, &deps);
-    let response = match tokio::time::timeout(budget, work).await {
-        Ok(response) => response,
-        Err(_) => unchanged(&request.reply, SkipReason::Timeout),
+    let work = remix(host.clone(), &drain, &request, &deps);
+    let (response, jobs) = match tokio::time::timeout(budget, work).await {
+        Ok(done) => done,
+        Err(_) => (unchanged(&request.reply, SkipReason::Timeout), Vec::new()),
     };
     if request.deliver {
         let delivery = DeliverRequest {
@@ -85,38 +84,46 @@ pub(crate) async fn run_with(
         // Delivery is the host's; its failure cannot change the reply.
         let _ = tokio::time::timeout(budget, host.deliver(delivery)).await;
     }
+    // Research starts only now, after the reply has gone out.
+    let background = Background::start(jobs);
     if background.is_empty() {
         // Nothing runs on: tell the host it can forget this request.
         let _ = tokio::time::timeout(budget, host.end()).await;
     } else {
-        background.spawn_end(host, drain);
+        background.finish_with_end(host, drain);
     }
     response
 }
 
-/// Background research started for one request. `End` is sent when the last
-/// task is done.
+/// Research the reply earned, held back until it has been delivered.
+type Job = std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>;
+
+/// Background research for one request, running after delivery. Dropping it
+/// before [`Background::finish_with_end`] (the call was cancelled) aborts the
+/// tasks, so nothing keeps calling back for a request nobody waits on.
 #[derive(Default)]
 struct Background {
-    tasks: std::sync::Mutex<Vec<tokio::task::JoinHandle<()>>>,
+    tasks: Vec<tokio::task::JoinHandle<()>>,
 }
 
 impl Background {
+    fn start(jobs: Vec<Job>) -> Self {
+        Self {
+            tasks: jobs.into_iter().map(tokio::spawn).collect(),
+        }
+    }
     fn is_empty(&self) -> bool {
-        self.tasks
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .is_empty()
+        self.tasks.is_empty()
     }
-    fn add(&self, task: tokio::task::JoinHandle<()>) {
-        self.tasks
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push(task);
-    }
-    fn spawn_end(&self, host: SharedHost, drain: Arc<Drain>) {
-        let tasks = std::mem::take(&mut *self.tasks.lock().unwrap_or_else(|e| e.into_inner()));
-        let Some(permit) = drain.admit() else { return };
+    /// Hand the tasks to a coordinator that sends `End` once they are all done.
+    fn finish_with_end(mut self, host: SharedHost, drain: Arc<Drain>) {
+        let tasks = std::mem::take(&mut self.tasks);
+        let Some(permit) = drain.admit() else {
+            for task in &tasks {
+                task.abort();
+            }
+            return;
+        };
         tokio::spawn(async move {
             let _permit = permit;
             for task in tasks {
@@ -127,13 +134,21 @@ impl Background {
     }
 }
 
+impl Drop for Background {
+    fn drop(&mut self) {
+        for task in &self.tasks {
+            task.abort();
+        }
+    }
+}
+
 async fn remix(
     host: SharedHost,
     drain: &Arc<Drain>,
     request: &RemixRequest,
-    background: &Background,
     deps: &Deps,
-) -> RemixResponse {
+) -> (RemixResponse, Vec<Job>) {
+    let mut jobs: Vec<Job> = Vec::new();
     let docs = Arc::new(Documents::fetch(&host).await);
     let ids = docs.remixed_ids();
     let built = engine::build(
@@ -166,7 +181,7 @@ async fn remix(
                 request.reply.clone(),
                 request.correlation.clone(),
             );
-            background.add(tokio::spawn(async move {
+            jobs.push(Box::pin(async move {
                 let _permit = permit;
                 let research =
                     tokio::time::timeout(RESEARCH_BUDGET, engine.learn_for_reply(intent, &reply));
@@ -209,7 +224,7 @@ async fn remix(
             .find(|t| t.role == WireRole::User)
             .map(|t| t.text.clone())
             .unwrap_or_default();
-        background.add(tokio::spawn(async move {
+        jobs.push(Box::pin(async move {
             let _permit = permit;
             let research =
                 tokio::time::timeout(RESEARCH_BUDGET, engine.learn_memes(intent, &moment));
@@ -247,13 +262,14 @@ async fn remix(
         (Some(_), _) if outcome.rating.is_none() => Some(SkipReason::Failed),
         _ => Some(SkipReason::BelowThreshold),
     };
-    RemixResponse {
+    let response = RemixResponse {
         wants_more_memes: outcome.wants_more_memes(),
         score: outcome.rating.map(|r| r.score),
         reply: outcome.reply,
         remixed,
         skipped,
-    }
+    };
+    (response, jobs)
 }
 
 /// Counts in-flight remixes so a close can wait for them and refuse new work.

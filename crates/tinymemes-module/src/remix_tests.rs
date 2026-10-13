@@ -31,6 +31,7 @@ struct Mock {
     docs: Mutex<HashMap<&'static str, String>>,
     states: Mutex<Vec<serde_json::Value>>,
     ended: Notify,
+    hang_delivery: AtomicBool,
     dropped: Arc<AtomicBool>,
 }
 
@@ -50,6 +51,7 @@ impl Mock {
             docs: Mutex::new(HashMap::new()),
             states: Mutex::new(Vec::new()),
             ended: Notify::new(),
+            hang_delivery: AtomicBool::new(false),
             dropped: Arc::default(),
         })
     }
@@ -167,6 +169,9 @@ impl Host for Mock {
     }
     async fn deliver(&self, request: DeliverRequest) -> HostResult<()> {
         self.note("deliver");
+        if self.hang_delivery.load(Ordering::SeqCst) {
+            std::future::pending::<()>().await;
+        }
         self.delivered.lock().unwrap().push(request);
         Ok(())
     }
@@ -521,4 +526,46 @@ async fn a_closing_module_starts_no_background_research() {
     run_with(host.clone(), drain, req, deps(&[])).await;
     ended(&host).await;
     assert_eq!(host.count("search"), 0);
+}
+
+#[tokio::test]
+async fn research_starts_only_after_the_reply_was_delivered() {
+    let host = Mock::new(Eval::Script {
+        slang_enough: 0.1,
+        meme: "celebration",
+    });
+    let mut req = request();
+    req.reply = "Done. Tagged `v1.4.0`; release notes are at https://example.com/r.".into();
+    req.deliver = true;
+    run(host.clone(), req).await;
+    ended(&host).await;
+    let calls = host.calls.lock().unwrap().clone();
+    let delivered = calls.iter().position(|c| *c == "deliver").unwrap();
+    let searched = calls.iter().position(|c| *c == "search").unwrap();
+    assert!(delivered < searched, "{calls:?}");
+}
+
+#[tokio::test]
+async fn a_cancelled_call_leaves_no_research_running() {
+    let host = Mock::new(Eval::Script {
+        slang_enough: 0.1,
+        meme: "celebration",
+    });
+    host.hang_delivery.store(true, Ordering::SeqCst);
+    let mut req = request();
+    req.reply = "Done. Tagged `v1.4.0`; release notes are at https://example.com/r.".into();
+    req.deliver = true;
+    let call = tokio::spawn(run(host.clone(), req));
+    while host.count("deliver") == 0 {
+        tokio::task::yield_now().await;
+    }
+    call.abort();
+    let _ = call.await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(
+        host.count("search"),
+        0,
+        "research must not outlive a cancelled call"
+    );
+    assert_eq!(host.count("end"), 0);
 }
