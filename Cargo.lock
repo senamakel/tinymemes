@@ -1202,7 +1202,7 @@ dependencies = [
 
 [[package]]
 name = "tinymemes"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -1218,7 +1218,7 @@ dependencies = [
 
 [[package]]
 name = "tinymemes-bus"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1229,7 +1229,7 @@ dependencies = [
 
 [[package]]
 name = "tinymemes-module"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "reqwest",
