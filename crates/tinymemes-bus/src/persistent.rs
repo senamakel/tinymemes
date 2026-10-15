@@ -51,6 +51,8 @@ pub enum MarkerStorageKind {
     Backend,
     /// Native lease guard no longer holds.
     Fenced,
+    /// Scope generation retired or unissued, or scope reset pending.
+    ScopeGenerationRejected,
 }
 
 /// Content-free failures. Native source chains never cross the ABI.
