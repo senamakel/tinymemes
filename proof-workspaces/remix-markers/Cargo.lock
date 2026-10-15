@@ -25,7 +25,7 @@ checksum = "82f6aeea286b8eb4dd3431a1be1b59d290ace00f5bfd8e2a159bc2a05e2c1667"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.8",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -119,7 +119,7 @@ checksum = "1b034bd7d5f032402a2479444dcc6f74e36a03f31854d41680fb240ef682a1ac"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.8",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -140,14 +140,14 @@ checksum = "c6232dd377dcc64799954cbd3a9bb882e9cdc1308ccd87b1c098f1fb2eaf82a8"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.8",
+ "syn 3.0.9",
 ]
 
 [[package]]
 name = "equivalent"
-version = "1.0.2"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
+checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
 
 [[package]]
 name = "errno"
@@ -458,9 +458,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.45"
+version = "0.23.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
+checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
 dependencies = [
  "log",
  "once_cell",
@@ -524,7 +524,7 @@ checksum = "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.8",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -609,9 +609,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "3.0.8"
+version = "3.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01016da373cd8f7ef12624f796309f5c31ba8d646dd08856c02cd741d823c622"
+checksum = "d78c8dee4c7bf0e14673097256fed6142ce9d3b85a408189d07482442145823b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -659,19 +659,19 @@ checksum = "fe5197923287db20a58125f0bc85c062f7f2c892de97b18c356f9efb14b28524"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.8",
+ "syn 3.0.9",
 ]
 
 [[package]]
 name = "tinybus"
-version = "0.1.4"
-source = "git+https://github.com/tinyhumansai/tinybus?rev=1f2557657db97470cd4efb7e1fc2f374f36fdd22#1f2557657db97470cd4efb7e1fc2f374f36fdd22"
-replace = "tinybus 0.1.4 (git+https://github.com/tinyhumansai/tinybus?rev=5256d08c41df5852ac1ccfcb58d4b24282b53cd7)"
+version = "0.1.5"
+source = "git+https://github.com/tinyhumansai/tinybus?rev=d5b949be8ea56eb5a17289a09aa28e8c09bd88b7#d5b949be8ea56eb5a17289a09aa28e8c09bd88b7"
+replace = "tinybus 0.1.5 (git+https://github.com/tinyhumansai/tinybus?rev=f11987b0b44c92da2064a4b3787ca7527a23db26)"
 
 [[package]]
 name = "tinybus"
-version = "0.1.4"
-source = "git+https://github.com/tinyhumansai/tinybus?rev=5256d08c41df5852ac1ccfcb58d4b24282b53cd7#5256d08c41df5852ac1ccfcb58d4b24282b53cd7"
+version = "0.1.5"
+source = "git+https://github.com/tinyhumansai/tinybus?rev=f11987b0b44c92da2064a4b3787ca7527a23db26#f11987b0b44c92da2064a4b3787ca7527a23db26"
 dependencies = [
  "async-trait",
  "flate2",
@@ -701,7 +701,7 @@ dependencies = [
 name = "tinymemes-client"
 version = "0.3.1"
 dependencies = [
- "tinybus 0.1.4 (git+https://github.com/tinyhumansai/tinybus?rev=1f2557657db97470cd4efb7e1fc2f374f36fdd22)",
+ "tinybus 0.1.5 (git+https://github.com/tinyhumansai/tinybus?rev=d5b949be8ea56eb5a17289a09aa28e8c09bd88b7)",
  "tinymemes-bus",
 ]
 
@@ -712,7 +712,7 @@ dependencies = [
  "async-trait",
  "serde_json",
  "tempfile",
- "tinybus 0.1.4 (git+https://github.com/tinyhumansai/tinybus?rev=1f2557657db97470cd4efb7e1fc2f374f36fdd22)",
+ "tinybus 0.1.5 (git+https://github.com/tinyhumansai/tinybus?rev=d5b949be8ea56eb5a17289a09aa28e8c09bd88b7)",
  "tinymemes-bus",
  "tinymemes-client",
  "tinystoragedrivers-bus",
@@ -724,18 +724,18 @@ dependencies = [
 
 [[package]]
 name = "tinystoragedrivers-bus"
-version = "0.5.0"
-source = "git+https://github.com/tinyhumansai/tinystoragedrivers?rev=7c5596f37e5d5440fbfa3a049a3ca98571885584#7c5596f37e5d5440fbfa3a049a3ca98571885584"
+version = "0.11.0"
+source = "git+https://github.com/tinyhumansai/tinystoragedrivers?tag=v0.11.0#9eeef54aea403ac07461a612189bdf4982782823"
 dependencies = [
  "serde",
  "serde_json",
- "tinybus 0.1.4 (git+https://github.com/tinyhumansai/tinybus?rev=1f2557657db97470cd4efb7e1fc2f374f36fdd22)",
+ "tinybus 0.1.5 (git+https://github.com/tinyhumansai/tinybus?rev=d5b949be8ea56eb5a17289a09aa28e8c09bd88b7)",
 ]
 
 [[package]]
 name = "tinystoragedrivers-core"
-version = "0.5.0"
-source = "git+https://github.com/tinyhumansai/tinystoragedrivers?rev=7c5596f37e5d5440fbfa3a049a3ca98571885584#7c5596f37e5d5440fbfa3a049a3ca98571885584"
+version = "0.11.0"
+source = "git+https://github.com/tinyhumansai/tinystoragedrivers?tag=v0.11.0#9eeef54aea403ac07461a612189bdf4982782823"
 dependencies = [
  "async-trait",
  "serde",
@@ -746,8 +746,8 @@ dependencies = [
 
 [[package]]
 name = "tinystoragedrivers-sqlite"
-version = "0.5.0"
-source = "git+https://github.com/tinyhumansai/tinystoragedrivers?rev=7c5596f37e5d5440fbfa3a049a3ca98571885584#7c5596f37e5d5440fbfa3a049a3ca98571885584"
+version = "0.11.0"
+source = "git+https://github.com/tinyhumansai/tinystoragedrivers?tag=v0.11.0#9eeef54aea403ac07461a612189bdf4982782823"
 dependencies = [
  "rusqlite",
  "serde_json",
@@ -757,22 +757,22 @@ dependencies = [
 
 [[package]]
 name = "tinystoragedrivers-tinybus"
-version = "0.5.0"
-source = "git+https://github.com/tinyhumansai/tinystoragedrivers?rev=7c5596f37e5d5440fbfa3a049a3ca98571885584#7c5596f37e5d5440fbfa3a049a3ca98571885584"
+version = "0.11.0"
+source = "git+https://github.com/tinyhumansai/tinystoragedrivers?tag=v0.11.0#9eeef54aea403ac07461a612189bdf4982782823"
 dependencies = [
  "async-trait",
  "serde",
  "serde_json",
- "tinybus 0.1.4 (git+https://github.com/tinyhumansai/tinybus?rev=1f2557657db97470cd4efb7e1fc2f374f36fdd22)",
+ "tinybus 0.1.5 (git+https://github.com/tinyhumansai/tinybus?rev=d5b949be8ea56eb5a17289a09aa28e8c09bd88b7)",
  "tinystoragedrivers-bus",
  "tinystoragedrivers-core",
 ]
 
 [[package]]
 name = "tokio"
-version = "1.53.2"
+version = "1.53.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e95f91fcc7a621e8b030f6aa23c71fe9838ae2fb4d8118b75602a328f5144044"
+checksum = "ce3335fa71841cda333a58d7615b03901380ecf09d59b3296d21f8bbac0dde4e"
 dependencies = [
  "bytes",
  "pin-project-lite",
@@ -787,7 +787,7 @@ checksum = "78773a2a397f451582ce068015985c33193cf6dea8b74d2a639fe457b2f07b0e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.8",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -963,7 +963,7 @@ dependencies = [
  "bumpalo",
  "proc-macro2",
  "quote",
- "syn 3.0.8",
+ "syn 3.0.9",
  "wasm-bindgen-shared",
 ]
 

@@ -20,7 +20,9 @@ pub const HOST_PATH: &str = "/ai/tinyhumans/tinymemes/Host";
 ///
 /// 1.1 adds the per-request `correlation` id carried by every host callback,
 /// the `End` callback, `RemixOptions`, turn/reply ids and `IndexKind::Remixed`.
-pub const CONTRACT_VERSION: (u32, u32) = (1, 1);
+/// 1.2 adds `MarkerStorageKind::ScopeGenerationRejected`, the storage class
+/// tinystoragedrivers 0.11 reports for a retired or unissued scope generation.
+pub const CONTRACT_VERSION: (u32, u32) = (1, 2);
 
 /// Whether a host built against [`CONTRACT_VERSION`] can bind to `module`.
 #[must_use]

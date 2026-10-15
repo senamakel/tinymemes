@@ -61,6 +61,7 @@ fn marker_kind(kind: StorageKind) -> MarkerStorageKind {
         StorageKind::Unavailable => MarkerStorageKind::Unavailable,
         StorageKind::Backend => MarkerStorageKind::Backend,
         StorageKind::Fenced => MarkerStorageKind::Fenced,
+        StorageKind::ScopeGenerationRejected => MarkerStorageKind::ScopeGenerationRejected,
     }
 }
 
@@ -191,3 +192,7 @@ impl tinybus::Interface for PersistentService {
         failure(MarkerFailure::ConflictExhausted)
     }
 }
+
+#[cfg(test)]
+#[path = "persistent_tests.rs"]
+mod tests;
