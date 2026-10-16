@@ -17,7 +17,7 @@ static-link = []
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v0.11.0" }
+tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.0.0" }
 tinymemes = { path = "../.." }
 tinymemes-bus = { path = "../tinymemes-bus" }
 serde = { version = "1", features = ["derive"] }

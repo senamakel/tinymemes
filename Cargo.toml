@@ -46,7 +46,7 @@ rust_2018_idioms = { level = "warn", priority = -1 }
 [lints.clippy]
 all = { level = "warn", priority = -1 }
 
-# tinystoragedrivers v0.11.0 pins tinybus d5b949be; every declaration here uses
+# tinystoragedrivers v1.0.0 pins tinybus d5b949be; every declaration here uses
 # the same rev so the graph holds one copy, and cargo's replacement selector
 # (source/name/version, not revision) moves that copy to the tinybus main commit
 # OpenHuman pins. Drop once a tinystoragedrivers tag pins that commit itself.
