@@ -1302,6 +1302,8 @@ version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
+ "tinystoragedrivers-core",
+ "tokio",
 ]
 
 [[package]]
@@ -1328,7 +1330,6 @@ dependencies = [
  "tinymemes-bus",
  "tinymemes-client",
  "tinystoragedrivers-bus",
- "tinystoragedrivers-core",
  "tokio",
  "tracing",
 ]

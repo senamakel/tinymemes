@@ -9,12 +9,6 @@ mod engine;
 mod host;
 mod persistent;
 mod remix;
-#[cfg(feature = "storage-schema")]
-mod storage;
-#[cfg(feature = "storage-schema")]
-pub use storage::{
-    LEGACY_STATE_COLLECTION, STATE_COLLECTION, state_body, state_id, state_text, storage_schema,
-};
 
 struct ContentService;
 #[async_trait::async_trait]
