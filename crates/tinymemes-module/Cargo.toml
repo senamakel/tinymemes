@@ -12,12 +12,17 @@ default = []
 # Link the module into a host binary without exporting the shared C names; the
 # host admits it in-process with `linked_module()`.
 static-link = []
+# Export `storage_schema()`: the `memes.state` collection and its v1 -> v2 step,
+# for a host that composes schemas and generates this module's storage grant.
+# Off by default so the loadable module does not link the storage core.
+storage-schema = ["dep:tinystoragedrivers-core"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v0.11.0" }
+tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.0.0" }
+tinystoragedrivers-core = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.0.0", optional = true }
 tinymemes = { path = "../.." }
 tinymemes-bus = { path = "../tinymemes-bus" }
 serde = { version = "1", features = ["derive"] }
