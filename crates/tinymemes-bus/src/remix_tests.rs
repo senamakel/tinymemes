@@ -32,11 +32,19 @@ fn bus_contract_depends_on_no_bus_runtime_or_storage_driver() {
     let manifest = include_str!("../Cargo.toml");
     // Normal dependencies only; dev-dependencies may use a runtime for tests.
     let normal = manifest.split("[dev-dependencies]").next().unwrap();
-    // The ports-only storage core is the one allowed storage crate: it supplies
-    // the `Schema` type `storage_schema()` returns and adds no I/O.
+    // Exemption, scoped to the opt-in `storage` feature: the optional,
+    // ports-only `tinystoragedrivers-core` (no I/O, no runtime). Default
+    // features stay free of every storage crate.
     let normal = normal
-        .replace("tinystoragedrivers-core", "")
-        .replace("github.com/tinyhumansai/tinystoragedrivers", "");
+        .lines()
+        .filter(|line| {
+            let optional_core =
+                line.starts_with("tinystoragedrivers-core") && line.contains("optional = true");
+            let feature = line.starts_with("storage = ");
+            !(optional_core || feature)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     for forbidden in ["tinybus", "tinystoragedrivers", "tokio", "reqwest"] {
         assert!(
             !normal.contains(forbidden),

@@ -7,11 +7,16 @@ license = "GPL-3.0-only"
 description = "Content-only TinyMemes contract: wire types, member names and versions. Synchronous and I/O-free."
 repository = "https://github.com/tinyhumansai/tinymemes"
 
+[features]
+default = []
+# `storage::storage_schema()`: the memes.state collection and its v1->v2 step.
+# Ports-only storage core (no I/O, no runtime); a host composing schemas enables it.
+storage = ["dep:tinystoragedrivers-core"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Ports only (no I/O, no runtime): the schema types `storage_schema()` returns.
-tinystoragedrivers-core = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.0.0", default-features = false }
+tinystoragedrivers-core = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.0.0", default-features = false, optional = true }
 
 [dev-dependencies]
 tinystoragedrivers-core = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.0.0", default-features = false }
