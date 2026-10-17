@@ -56,7 +56,8 @@ pub fn state_id(kind: IndexKind) -> &'static str {
 /// The v2 body for the text the module saved for `kind`.
 ///
 /// A JSON object is the body; the remixed ring (an array of ids) becomes
-/// `{"ids": [...]}`. Anything else is kept as `{"unparsed": "<text>"}`.
+/// `{"ids": [...]}`. Anything else, including an object whose own `unparsed` field is a string,
+/// is kept as `{"unparsed": "<text>"}`.
 #[must_use]
 pub fn state_body(kind: IndexKind, text: &str) -> Value {
     body_for(state_id(kind), text)
@@ -77,7 +78,14 @@ pub fn state_text(kind: IndexKind, body: &Value) -> String {
 fn body_for(id: &str, text: &str) -> Value {
     match serde_json::from_str::<Value>(text) {
         Ok(Value::Array(ids)) if id == state_id(IndexKind::Remixed) => json!({ IDS: ids }),
-        Ok(object @ Value::Object(_)) if id != state_id(IndexKind::Remixed) => object,
+        // An object carrying a string `unparsed` field would be read back as the
+        // fallback marker by `state_text`, so it is wrapped like any other text.
+        Ok(Value::Object(fields))
+            if id != state_id(IndexKind::Remixed)
+                && !fields.get(UNPARSED).is_some_and(Value::is_string) =>
+        {
+            Value::Object(fields)
+        }
         _ => json!({ UNPARSED: text }),
     }
 }

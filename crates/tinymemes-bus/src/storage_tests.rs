@@ -156,3 +156,13 @@ async fn the_step_keeps_unparseable_and_malformed_v1_documents() {
         json!({"unparsed": r#"{"other":1}"#})
     );
 }
+
+#[test]
+fn an_object_with_an_unparsed_field_survives_a_round_trip() {
+    for kind in [IndexKind::Slang, IndexKind::Memes] {
+        let text = r#"{"unparsed":"hello","terms":[]}"#;
+        let body = state_body(kind, text);
+        assert_eq!(body, json!({ "unparsed": text }));
+        assert_eq!(state_text(kind, &body), text);
+    }
+}
