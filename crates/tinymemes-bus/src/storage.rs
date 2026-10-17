@@ -7,8 +7,8 @@
 //! text (v1 kept the text as a string in `{"json": "<text>"}` in
 //! `tinymemes_documents`). [`state_body`] and [`state_text`] are the two
 //! directions of that mapping, so the host and the migration step agree on it.
+use crate::IndexKind;
 use serde_json::{Value, json};
-use tinymemes_bus::IndexKind;
 use tinystoragedrivers_core::schema::{
     Owner, Schema, ScopeClass, SourceRecord, Step, TargetRecord,
 };

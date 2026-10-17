@@ -1,8 +1,8 @@
 # Storage on the v2 schema
 
-`tinymemes-module` (feature `storage-schema`, off by default so the loadable
-module does not link the storage core) exports
-`storage_schema() -> tinystoragedrivers_core::Schema`. A host composes it with
+`tinymemes-bus` (`tinymemes_bus::storage::storage_schema()`) exports
+`storage_schema() -> tinystoragedrivers_core::Schema` (the ports-only storage
+core, no I/O). A host composes it with
 `Registry::compose`, and the module's storage grant is generated from its items.
 
 | v1 | v2 | Scope class | Change |

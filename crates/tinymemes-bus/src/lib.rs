@@ -2,7 +2,8 @@
 //!
 //! This crate is plain data: interface and member names, versions and
 //! request/response types. It is synchronous and does no I/O, and depends on
-//! neither `tinybus` nor a storage crate. The typed bus clients live in
+//! not on `tinybus`. Its one storage dependency is the ports-only
+//! `tinystoragedrivers-core`, for the `storage_schema()` the host composes. The typed bus clients live in
 //! `tinymemes-client`.
 //!
 //! Supplied snapshots and revision numbers are data. They confer no authority,
@@ -13,6 +14,7 @@ mod intent;
 mod records;
 mod remix;
 mod state;
+pub mod storage;
 mod tier;
 pub use intent::Intent;
 pub use records::*;
