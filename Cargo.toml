@@ -1,11 +1,11 @@
 [workspace]
-exclude = ["proof-workspaces/remix-markers"]
+exclude = ["proof-workspaces/bus-contract", "proof-workspaces/remix-markers"]
 members = [".", "crates/tinymemes-bus", "crates/tinymemes-client", "crates/tinymemes-module"]
 resolver = "2"
 
 [package]
 name = "tinymemes"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 rust-version = "1.88"
 license = "GPL-3.0-only"
@@ -34,6 +34,10 @@ tracing = "0.1"
 # this module share one `tinyinference-decisions` package.
 tinyinference-decisions = { git = "https://github.com/tinyhumansai/tinyinference", rev = "abf90568a24b826d49900150b20856ef166df3f8" }
 
+[patch."https://github.com/tinyhumansai/tinybus"]
+tinybus = { path = "vendor/tinybus/crates/tinybus" }
+tinybus-module = { path = "vendor/tinybus/crates/tinybus-module" }
+
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
@@ -45,11 +49,3 @@ rust_2018_idioms = { level = "warn", priority = -1 }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
-
-# tinystoragedrivers v1.0.0 pins tinybus d5b949be; every declaration here uses
-# the same rev so the graph holds one copy, and cargo's replacement selector
-# (source/name/version, not revision) moves that copy to the tinybus main commit
-# OpenHuman pins. Drop once a tinystoragedrivers tag pins that commit itself.
-[replace]
-"https://github.com/tinyhumansai/tinybus#tinybus:0.1.5" = { git = "https://github.com/tinyhumansai/tinybus", rev = "f11987b0b44c92da2064a4b3787ca7527a23db26" }
-"https://github.com/tinyhumansai/tinybus#tinybus-module:0.1.5" = { git = "https://github.com/tinyhumansai/tinybus", rev = "f11987b0b44c92da2064a4b3787ca7527a23db26" }

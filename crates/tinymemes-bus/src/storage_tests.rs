@@ -132,6 +132,28 @@ async fn the_step_is_a_no_op_without_v1_data_and_idempotent() {
 }
 
 #[tokio::test]
+async fn the_step_preserves_document_expiry_metadata() {
+    let storage = MemoryStorage::with_clock(std::sync::Arc::new(|| 1_234))
+        .for_scope(&Scope::local())
+        .unwrap();
+    storage
+        .documents()
+        .put_with(
+            LEGACY_STATE_COLLECTION,
+            "slang",
+            json!({ "json": r#"{"terms":[],"searches":[]}"# }),
+            Precondition::Absent,
+            WriteOptions::new().schema(1).expires_ms(9_999),
+        )
+        .await
+        .unwrap();
+
+    migrated(&storage).await;
+
+    assert_eq!(v2(&storage, "slang").await.unwrap().meta.expires_ms, Some(9_999));
+}
+
+#[tokio::test]
 async fn the_step_keeps_unparseable_and_malformed_v1_documents() {
     let storage = scoped();
     seed_v1(&storage, "slang", "not json").await;

@@ -137,7 +137,8 @@ async fn load() -> (
     let broker = Broker::new();
     let task = broker.spawn(bus.clone());
     let host = ModuleHost::new(broker);
-    host.load_file(&staged).unwrap();
+    let info = host.load_file(&staged).unwrap();
+    assert_eq!(info.name, env!("CARGO_PKG_NAME"));
     let caller = Connection::connect(bus.connect().await.unwrap())
         .await
         .unwrap();
@@ -147,10 +148,15 @@ async fn load() -> (
 /// A scratch directory next to the artifact, removed on drop.
 mod tempfile_dir {
     use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
+
     pub struct Dir(PathBuf);
     impl Dir {
         pub fn new_in(parent: &Path) -> Self {
-            let path = parent.join(format!("compiled-remix-{}-{}", std::process::id(), line!()));
+            let serial = NEXT_TEMP.fetch_add(1, Ordering::Relaxed);
+            let path = parent.join(format!("compiled-remix-{}-{serial}", std::process::id()));
             let _ = std::fs::remove_dir_all(&path);
             std::fs::create_dir_all(&path).unwrap();
             Self(path)
@@ -164,6 +170,39 @@ mod tempfile_dir {
             let _ = std::fs::remove_dir_all(&self.0);
         }
     }
+}
+
+#[tokio::test]
+async fn the_public_loader_rejects_digest_pinned_invalid_native_bytes() {
+    let target = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target");
+    let dir = tempfile_dir::Dir::new_in(&target);
+    let library = format!(
+        "{}tinymemes_module{}",
+        std::env::consts::DLL_PREFIX,
+        std::env::consts::DLL_SUFFIX
+    );
+    let artifact = dir.path().join(&library);
+    std::fs::write(&artifact, b"not a TinyBus native library").unwrap();
+    let digest = tinybus::module::sha256_file(&artifact).unwrap();
+    std::fs::write(
+        dir.path().join("modules.toml"),
+        format!("{library:?} = {digest:?}\n"),
+    )
+    .unwrap();
+
+    let bus = MemoryBus::new();
+    let broker = Broker::new();
+    let _task = broker.spawn(bus);
+    let error = match ModuleHost::new(broker).load_file(&artifact) {
+        Err(error) => error,
+        Ok(_) => panic!("the public loader accepted digest-pinned invalid native bytes"),
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("dynamic loader rejected the artifact"),
+        "the negative control must reach the native loader, not fail an earlier gate: {error}"
+    );
 }
 
 fn request(correlation: &str) -> RemixRequest {

@@ -1,0 +1,9 @@
+[package]
+name = "tinymemes-bus-default-consumer"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.88"
+publish = false
+
+[dependencies]
+tinymemes-bus = { path = "../../../crates/tinymemes-bus", default-features = true }
