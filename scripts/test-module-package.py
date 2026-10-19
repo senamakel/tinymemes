@@ -226,6 +226,23 @@ class PackageVerification(unittest.TestCase):
             self.assertTrue(any("compiled_state" in call["args"] for call in calls), calls)
             self.assertTrue(any("tinymemes-remix-marker-proof" in call["args"] for call in calls), calls)
 
+    def test_windows_acl_setup_is_gated_to_windows_hosts(self):
+        verifier = (ROOT / "scripts/verify-module.ps1").read_text()
+        self.assertIn("if ($IsWindows)", verifier)
+        gate = verifier.index("if ($IsWindows)")
+        identity = verifier.index("WindowsIdentity]::GetCurrent()")
+        acl = verifier.index("Set-Acl", identity)
+        self.assertLess(gate, identity)
+        self.assertLess(identity, acl)
+
+    def test_compiled_loader_windows_fixture_uses_private_inherited_acl(self):
+        source = (ROOT / "crates/tinymemes-module/tests/compiled_remix.rs").read_text()
+        helper = source.split("fn secure_windows_fixture_directory", 1)[1].split("\n    }", 1)[0]
+        self.assertIn("#[cfg(windows)]", source.split("fn secure_windows_fixture_directory", 1)[0][-40:])
+        self.assertIn('"/inheritance:r", "/grant:r"', helper)
+        self.assertIn('format!("*{}:(OI)(CI)F"', helper)
+        self.assertIn("secure_windows_fixture_directory(&path)", source)
+
 
 if __name__ == "__main__":
     unittest.main()

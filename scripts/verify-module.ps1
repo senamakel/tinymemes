@@ -12,20 +12,22 @@ $priorModule = $env:TINYMEMES_MODULE
 $work = Join-Path $root "target/verify-module-$([System.Guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory $work | Out-Null
 try {
-    $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
-    $security = [System.Security.AccessControl.DirectorySecurity]::new()
-    $security.SetOwner($identity.User)
-    $security.SetAccessRuleProtection($true, $false)
-    foreach ($sidValue in @($identity.User.Value, 'S-1-5-18', 'S-1-5-32-544')) {
-        $rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
-            [System.Security.Principal.SecurityIdentifier]::new($sidValue),
-            [System.Security.AccessControl.FileSystemRights]::FullControl,
-            [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit',
-            [System.Security.AccessControl.PropagationFlags]::None,
-            [System.Security.AccessControl.AccessControlType]::Allow)
-        [void]$security.AddAccessRule($rule)
+    if ($IsWindows) {
+        $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+        $security = [System.Security.AccessControl.DirectorySecurity]::new()
+        $security.SetOwner($identity.User)
+        $security.SetAccessRuleProtection($true, $false)
+        foreach ($sidValue in @($identity.User.Value, 'S-1-5-18', 'S-1-5-32-544')) {
+            $rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+                [System.Security.Principal.SecurityIdentifier]::new($sidValue),
+                [System.Security.AccessControl.FileSystemRights]::FullControl,
+                [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit',
+                [System.Security.AccessControl.PropagationFlags]::None,
+                [System.Security.AccessControl.AccessControlType]::Allow)
+            [void]$security.AddAccessRule($rule)
+        }
+        Set-Acl -LiteralPath $work -AclObject $security
     }
-    Set-Acl -LiteralPath $work -AclObject $security
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [System.IO.Compression.ZipFile]::OpenRead($archivePath)
     try {

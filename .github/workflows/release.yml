@@ -3,14 +3,34 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      release_mode:
+        description: Release the next crate version or a reviewed epic module version
+        type: choice
+        required: true
+        default: main
+        options:
+          - main
+          - reviewed-epic
       bump:
         description: Version bump to release
         type: choice
-        required: true
+        required: false
         options:
           - patch
           - minor
           - major
+      tag:
+        description: Existing tag for a reviewed epic module release
+        type: string
+        required: false
+      version:
+        description: Module version without the leading v
+        type: string
+        required: false
+      reviewed-pr:
+        description: Canonical PR number whose merge commit is tagged
+        type: string
+        required: false
 
 concurrency:
   group: release-${{ github.ref_name }}
@@ -20,9 +40,52 @@ permissions:
   contents: write
 
 jobs:
+  resolve:
+    name: Validate release request
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.route.outputs.mode }}
+      bump: ${{ steps.route.outputs.bump }}
+      tag: ${{ steps.route.outputs.tag }}
+      version: ${{ steps.route.outputs.version }}
+      reviewed_pr: ${{ steps.route.outputs.reviewed_pr }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - name: Validate release mode and inputs
+        id: route
+        shell: bash
+        env:
+          RELEASE_MODE: ${{ inputs.release_mode }}
+          BUMP: ${{ inputs.bump }}
+          TAG: ${{ inputs.tag }}
+          VERSION: ${{ inputs.version }}
+          REVIEWED_PR: ${{ inputs.reviewed-pr }}
+        run: scripts/resolve-release-mode.sh
+
+  reviewed-module-release:
+    name: Publish reviewed module release
+    needs: resolve
+    if: ${{ needs.resolve.outputs.mode == 'reviewed-epic' }}
+    permissions:
+      contents: write
+      pull-requests: read
+      checks: read
+      actions: read
+    uses: tinyhumansai/.github/.github/workflows/module-reviewed-epic-release.yml@6ed83b04aab2d8977ec62e966cb914531e534fa4
+    with:
+      tag: ${{ needs.resolve.outputs.tag }}
+      version: ${{ needs.resolve.outputs.version }}
+      reviewed-pr: ${{ needs.resolve.outputs.reviewed_pr }}
+
   publish:
     name: Publish crate
-    if: ${{ github.ref == 'refs/heads/main' }}
+    needs: resolve
+    if: ${{ github.ref == 'refs/heads/main' && needs.resolve.outputs.mode == 'main' }}
     runs-on: ubuntu-latest
     environment: Production
     outputs:
@@ -65,7 +128,7 @@ jobs:
           fi
 
           IFS=. read -r major minor patch <<< "$current_version"
-          case "${{ inputs.bump }}" in
+          case "${{ needs.resolve.outputs.bump }}" in
             major)
               major=$((major + 1))
               minor=0
@@ -79,7 +142,7 @@ jobs:
               patch=$((patch + 1))
               ;;
             *)
-              echo "Unsupported bump: ${{ inputs.bump }}" >&2
+              echo "Unsupported bump: ${{ needs.resolve.outputs.bump }}" >&2
               exit 1
               ;;
           esac

@@ -134,6 +134,33 @@ mod tempfile_dir {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
 
+    #[cfg(windows)]
+    fn secure_windows_fixture_directory(path: &Path) {
+        let identity = std::process::Command::new("powershell")
+            .args([
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
+            ])
+            .output()
+            .expect("PowerShell is available on Windows test runners");
+        assert!(
+            identity.status.success(),
+            "current-user SID query failed: {identity:?}"
+        );
+        let sid = String::from_utf8(identity.stdout).expect("SID output is UTF-8");
+        let grant = format!("*{}:(OI)(CI)F", sid.trim());
+        let acl = std::process::Command::new("icacls")
+            .arg(path)
+            .args(["/inheritance:r", "/grant:r"])
+            .arg(grant)
+            .output()
+            .expect("icacls is available on Windows test runners");
+        assert!(acl.status.success(), "private fixture ACL failed: {acl:?}");
+    }
+
     static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
     pub struct Dir(PathBuf);
@@ -143,6 +170,8 @@ mod tempfile_dir {
             let path = parent.join(format!("compiled-remix-{}-{serial}", std::process::id()));
             let _ = std::fs::remove_dir_all(&path);
             std::fs::create_dir_all(&path).unwrap();
+            #[cfg(windows)]
+            secure_windows_fixture_directory(&path);
             Self(path)
         }
         pub fn path(&self) -> &Path {

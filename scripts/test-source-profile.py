@@ -1,9 +1,13 @@
 """Regression checks for the published SDK and reviewed release profile."""
 from pathlib import Path
+import os
 import subprocess
+import tempfile
 import tomllib
 import unittest
 import re
+from types import SimpleNamespace
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -17,7 +21,98 @@ def manifest(relative_path):
     return tomllib.loads((ROOT / relative_path).read_text())
 
 
+def git_tree_executable(relative_path):
+    entry = subprocess.run(
+        ["git", "ls-tree", "HEAD", "--", relative_path],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.strip()
+    return bool(entry) and entry.split(maxsplit=1)[0] == "100755"
+
+
 class PublishedSdkProfile(unittest.TestCase):
+    def resolve_release(self, **overrides):
+        environment = os.environ.copy()
+        environment.update({
+            "GITHUB_EVENT_NAME": "workflow_dispatch",
+            "GITHUB_REF": "refs/heads/main",
+            "RELEASE_MODE": "",
+            "BUMP": "",
+            "TAG": "",
+            "VERSION": "",
+            "REVIEWED_PR": "",
+            **overrides,
+        })
+        with tempfile.NamedTemporaryFile() as output:
+            environment["GITHUB_OUTPUT"] = output.name
+            result = subprocess.run(
+                ["bash", str(ROOT / "scripts/resolve-release-mode.sh")],
+                cwd=ROOT,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            output.seek(0)
+            values = dict(
+                line.split("=", 1)
+                for line in output.read().decode().splitlines()
+                if "=" in line
+            )
+        return result, values
+
+    def test_release_router_finite_main_and_reviewed_input_matrix(self):
+        valid = (
+            ({"BUMP": "patch"}, {"mode": "main", "bump": "patch"}),
+            (
+                {
+                    "RELEASE_MODE": "reviewed-epic",
+                    "TAG": "v0.4.2",
+                    "VERSION": "0.4.2",
+                    "REVIEWED_PR": "16",
+                },
+                {"mode": "reviewed-epic", "tag": "v0.4.2", "version": "0.4.2", "reviewed_pr": "16"},
+            ),
+        )
+        for inputs, expected in valid:
+            with self.subTest(inputs=inputs):
+                result, outputs = self.resolve_release(**inputs)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                for key, value in expected.items():
+                    self.assertEqual(outputs.get(key), value)
+
+        invalid = (
+            {"BUMP": ""},
+            {"BUMP": "wat"},
+            {"BUMP": "patch", "TAG": "v0.4.2"},
+            {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2"},
+            {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "0"},
+            {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "016"},
+            {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.3", "VERSION": "0.4.2", "REVIEWED_PR": "16"},
+            {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_EVENT_NAME": "push"},
+            {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_REF": "refs/heads/feature"},
+            {"RELEASE_MODE": "unknown", "BUMP": "patch"},
+        )
+        for inputs in invalid:
+            with self.subTest(invalid=inputs):
+                result, _ = self.resolve_release(**inputs)
+                self.assertNotEqual(result.returncode, 0)
+
+        release = (ROOT / ".github/workflows/release.yml").read_text()
+        self.assertIn("reviewed-module-release:", release)
+        self.assertIn(
+            "module-reviewed-epic-release.yml@" + RELEASE_PIN,
+            release,
+        )
+        self.assertIn("module-release:", release)
+        self.assertIn("needs.resolve.outputs.mode == 'main'", release)
+
+    def test_git_executable_mode_survives_windows_filesystem_mode_bits(self):
+        with patch.object(Path, "stat", return_value=SimpleNamespace(st_mode=0o100644)):
+            self.assertTrue(git_tree_executable("scripts/build-module.sh"))
+
     def test_every_direct_tinybus_edge_uses_the_published_sdk(self):
         manifests = (
             "crates/tinymemes-client/Cargo.toml",
@@ -111,6 +206,10 @@ class PublishedSdkProfile(unittest.TestCase):
         self.assertIn("expected 11 module archives", release)
         self.assertIn("submodules: recursive", release)
         self.assertIn("proof-workspaces/bus-contract/Cargo.lock", release)
+        self.assertIn("release_mode:", release)
+        self.assertIn("needs.resolve.outputs.mode == 'reviewed-epic'", release)
+        self.assertIn("needs.resolve.outputs.mode == 'main'", release)
+        self.assertIn("run: scripts/resolve-release-mode.sh", release)
 
     def test_shared_release_packagers_and_distro_runner_are_present(self):
         for relative_path in (
@@ -140,7 +239,7 @@ class PublishedSdkProfile(unittest.TestCase):
             "scripts/install-distro-packages.sh",
         ):
             with self.subTest(path=relative_path):
-                self.assertTrue((ROOT / relative_path).stat().st_mode & 0o111)
+                self.assertTrue(git_tree_executable(relative_path))
 
 
 if __name__ == "__main__":
