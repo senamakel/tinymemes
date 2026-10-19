@@ -45,8 +45,10 @@ class PublishedSdkProfile(unittest.TestCase):
             "REVIEWED_PR": "",
             **overrides,
         })
-        with tempfile.NamedTemporaryFile() as output:
-            environment["GITHUB_OUTPUT"] = output.name
+        with tempfile.TemporaryDirectory(prefix="release-router-") as scratch:
+            output = Path(scratch) / "github-output"
+            output.touch()
+            environment["GITHUB_OUTPUT"] = str(output)
             result = subprocess.run(
                 ["bash", str(ROOT / "scripts/resolve-release-mode.sh")],
                 cwd=ROOT,
@@ -55,10 +57,9 @@ class PublishedSdkProfile(unittest.TestCase):
                 capture_output=True,
                 check=False,
             )
-            output.seek(0)
             values = dict(
                 line.split("=", 1)
-                for line in output.read().decode().splitlines()
+                for line in output.read_text().splitlines()
                 if "=" in line
             )
         return result, values
@@ -72,6 +73,7 @@ class PublishedSdkProfile(unittest.TestCase):
                     "TAG": "v0.4.2",
                     "VERSION": "0.4.2",
                     "REVIEWED_PR": "16",
+                    "GITHUB_REF": "refs/heads/epic/8056-modules-wiring",
                 },
                 {"mode": "reviewed-epic", "tag": "v0.4.2", "version": "0.4.2", "reviewed_pr": "16"},
             ),
@@ -92,7 +94,10 @@ class PublishedSdkProfile(unittest.TestCase):
             {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "016"},
             {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.3", "VERSION": "0.4.2", "REVIEWED_PR": "16"},
             {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_EVENT_NAME": "push"},
+            {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_REF": "refs/heads/main"},
             {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_REF": "refs/heads/feature"},
+            {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_REF": "refs/tags/v0.4.2"},
+            {"RELEASE_MODE": "main", "BUMP": "patch", "GITHUB_REF": "refs/heads/epic/8056-modules-wiring"},
             {"RELEASE_MODE": "unknown", "BUMP": "patch"},
         )
         for inputs in invalid:
@@ -108,6 +113,11 @@ class PublishedSdkProfile(unittest.TestCase):
         )
         self.assertIn("module-release:", release)
         self.assertIn("needs.resolve.outputs.mode == 'main'", release)
+        self.assertIn("refs/heads/epic/8056-modules-wiring", release)
+        self.assertIn("ref: ${{ github.sha }}", release)
+        self.assertIn("github.event_name == 'workflow_dispatch'", release)
+        self.assertIn("github.ref == 'refs/heads/main' && needs.resolve.outputs.mode == 'main'", release)
+        self.assertIn("github.ref == 'refs/heads/epic/8056-modules-wiring' && needs.resolve.outputs.mode == 'reviewed-epic'", release)
 
     def test_git_executable_mode_survives_windows_filesystem_mode_bits(self):
         with patch.object(Path, "stat", return_value=SimpleNamespace(st_mode=0o100644)):

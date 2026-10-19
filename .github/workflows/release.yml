@@ -42,7 +42,7 @@ permissions:
 jobs:
   resolve:
     name: Validate release request
-    if: ${{ github.ref == 'refs/heads/main' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/epic/8056-modules-wiring') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -55,7 +55,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ github.sha }}
       - name: Validate release mode and inputs
         id: route
         shell: bash
@@ -70,7 +70,7 @@ jobs:
   reviewed-module-release:
     name: Publish reviewed module release
     needs: resolve
-    if: ${{ needs.resolve.outputs.mode == 'reviewed-epic' }}
+    if: ${{ github.ref == 'refs/heads/epic/8056-modules-wiring' && needs.resolve.outputs.mode == 'reviewed-epic' }}
     permissions:
       contents: write
       pull-requests: read

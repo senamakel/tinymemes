@@ -15,10 +15,10 @@ fail() {
 }
 
 [[ "$event" == "workflow_dispatch" ]] || fail "releases must be manually dispatched"
-[[ "$ref" == "refs/heads/main" ]] || fail "release workflow must be dispatched from main"
 
 case "$mode" in
   main)
+    [[ "$ref" == "refs/heads/main" ]] || fail "main releases must be dispatched from main"
     [[ "$bump" == "patch" || "$bump" == "minor" || "$bump" == "major" ]] \
       || fail "main release requires bump=patch, minor, or major"
     [[ -z "$tag" && -z "$version" && -z "$reviewed_pr" ]] \
@@ -29,6 +29,8 @@ case "$mode" in
     } >> "$GITHUB_OUTPUT"
     ;;
   reviewed-epic)
+    [[ "$ref" == "refs/heads/epic/8056-modules-wiring" ]] \
+      || fail "reviewed-epic releases must be dispatched from epic/8056-modules-wiring"
     [[ -z "$bump" ]] || fail "bump is only valid in main release mode"
     [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]] \
       || fail "reviewed-epic tag must be v-prefixed semver"
