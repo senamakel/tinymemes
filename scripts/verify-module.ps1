@@ -58,7 +58,22 @@ try {
         throw 'modules.toml does not pin the packaged library hash'
     }
     $env:TINYMEMES_MODULE = $library
-    bash scripts/test-module-e2e.sh
+    if ($IsWindows) {
+        $git = Get-Command git.exe -CommandType Application -ErrorAction Stop
+        $gitRoot = Split-Path -Parent (Split-Path -Parent $git.Source)
+        $bash = Join-Path $gitRoot 'bin/bash.exe'
+        if (-not (Test-Path -LiteralPath $bash -PathType Leaf)) {
+            throw 'Git for Windows Bash was not found beside git.exe'
+        }
+    }
+    else {
+        $bashCommand = Get-Command bash -CommandType Application -ErrorAction Stop
+        $bash = $bashCommand.Source
+    }
+    $bashVersion = (& $bash --version 2>&1 | Select-Object -First 1)
+    if ($LASTEXITCODE -ne 0) { throw "Bash version probe failed: $bash" }
+    Write-Host "Using Bash executable: $bash ($bashVersion)"
+    & $bash 'scripts/test-module-e2e.sh'
     if ($LASTEXITCODE -ne 0) { throw 'extracted module failed the TinyBus loader and contract checks' }
 } finally {
     if ($null -eq $priorModule) { Remove-Item Env:TINYMEMES_MODULE -ErrorAction SilentlyContinue }

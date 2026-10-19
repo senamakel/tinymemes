@@ -10,6 +10,8 @@ import tarfile
 import tempfile
 import unittest
 import zipfile
+sys.dont_write_bytecode = True
+from test_support import bash_diagnostic, run_bash
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -48,6 +50,16 @@ class PackageVerification(unittest.TestCase):
         )
         return log
 
+    def run_unix_verifier(self, archive, environment):
+        archive_arg = Path(os.path.relpath(archive, ROOT)).as_posix()
+        return run_bash(
+            "scripts/verify-module.sh",
+            "--archive",
+            archive_arg,
+            cwd=ROOT,
+            env=environment,
+        )
+
     @unittest.skipUnless(os.name == "posix", "Unix archive verifier runs on Unix CI")
     def test_verifier_passes_extracted_library_to_e2e_and_propagates_failure(self):
         (ROOT / "target").mkdir(exist_ok=True)
@@ -74,16 +86,8 @@ class PackageVerification(unittest.TestCase):
                 MODULE_HOST=HOST,
             )
             log = self.install_cargo_spy(scratch, environment)
-            verifier = ROOT / "scripts/verify-module.sh"
-            accepted = subprocess.run(
-                ["bash", str(verifier), "--archive", str(archive)],
-                cwd=ROOT,
-                env=environment,
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-            self.assertEqual(accepted.returncode, 0, accepted.stderr)
+            accepted = self.run_unix_verifier(archive, environment)
+            self.assertEqual(accepted.returncode, 0, bash_diagnostic(accepted))
             calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
             e2e_calls = [
                 call
@@ -93,6 +97,10 @@ class PackageVerification(unittest.TestCase):
             ]
             self.assertTrue(e2e_calls, f"no Cargo native checks were requested: {calls}")
             self.assertTrue(all(call["sha256"] == digest for call in e2e_calls), calls)
+            staged_paths = {Path(call["module"]) for call in e2e_calls}
+            self.assertEqual(len(staged_paths), 1, calls)
+            staged_path = next(iter(staged_paths))
+            self.assertTrue(staged_path.parent.name.startswith("module-e2e-private-"), calls)
             self.assertFalse(any(call["args"][:1] == ["build"] for call in calls), calls)
             self.assertTrue(
                 any("compiled_remix" in call["args"] for call in calls),
@@ -109,15 +117,8 @@ class PackageVerification(unittest.TestCase):
 
             log.write_text("")
             environment["SPY_FAIL"] = "compiled_remix"
-            rejected = subprocess.run(
-                ["bash", str(verifier), "--archive", str(archive)],
-                cwd=ROOT,
-                env=environment,
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-            self.assertNotEqual(rejected.returncode, 0)
+            rejected = self.run_unix_verifier(archive, environment)
+            self.assertNotEqual(rejected.returncode, 0, bash_diagnostic(rejected))
             failed_calls = [json.loads(line) for line in log.read_text().splitlines()]
             self.assertTrue(any("compiled_remix" in call["args"] for call in failed_calls))
 
@@ -148,16 +149,8 @@ class PackageVerification(unittest.TestCase):
                 MODULE_HOST=HOST,
             )
             self.install_cargo_spy(scratch, environment)
-            verifier = ROOT / "scripts/verify-module.sh"
-            accepted = subprocess.run(
-                ["bash", str(verifier), "--archive", str(archive)],
-                cwd=ROOT,
-                env=environment,
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-            self.assertEqual(accepted.returncode, 0, accepted.stderr)
+            accepted = self.run_unix_verifier(archive, environment)
+            self.assertEqual(accepted.returncode, 0, bash_diagnostic(accepted))
 
             files["modules.toml"] = b'"libtinymemes_module.so" = "' + b"0" * 64 + b'"\n'
             with tarfile.open(archive, "w:gz") as package:
@@ -165,16 +158,9 @@ class PackageVerification(unittest.TestCase):
                     path = scratch / name
                     path.write_bytes(body)
                     package.add(path, arcname=name)
-            rejected = subprocess.run(
-                ["bash", str(verifier), "--archive", str(archive)],
-                cwd=ROOT,
-                env=environment,
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-            self.assertNotEqual(rejected.returncode, 0)
-            self.assertIn("does not pin", rejected.stderr)
+            rejected = self.run_unix_verifier(archive, environment)
+            self.assertNotEqual(rejected.returncode, 0, bash_diagnostic(rejected))
+            self.assertIn("does not pin", rejected.stderr, bash_diagnostic(rejected))
 
     @unittest.skipUnless(shutil.which("pwsh"), "PowerShell is only installed on Windows CI")
     def test_windows_verifier_checks_digest_and_native_spy_results(self):
@@ -213,7 +199,11 @@ class PackageVerification(unittest.TestCase):
                 capture_output=True,
                 check=False,
             )
-            self.assertEqual(verified.returncode, 0, verified.stderr)
+            self.assertEqual(
+                verified.returncode,
+                0,
+                f"PowerShell verifier failed\nstdout: {verified.stdout!r}\nstderr: {verified.stderr!r}",
+            )
             calls = [json.loads(line) for line in log.read_text().splitlines()]
             loader_calls = [
                 call for call in calls
@@ -242,6 +232,65 @@ class PackageVerification(unittest.TestCase):
         self.assertIn('"/inheritance:r", "/grant:r"', helper)
         self.assertIn('format!("*{}:(OI)(CI)F"', helper)
         self.assertIn("secure_windows_fixture_directory(&path)", source)
+
+    def test_module_e2e_stages_one_hashed_artifact_in_a_private_windows_directory(self):
+        source = (ROOT / "scripts/test-module-e2e.sh").read_text()
+        self.assertIn('module-e2e-private-XXXXXX', source)
+        self.assertIn('icacls "$stage_windows" /inheritance:r /grant:r', source)
+        self.assertIn('source_hash="$(file_hash "$source_path")"', source)
+        self.assertIn('staged_hash="$(file_hash "$staged_module")"', source)
+        self.assertIn('[[ "$source_hash" == "$staged_hash" ]]', source)
+        self.assertIn('staged_env_path="$(cygpath -w "$staged_module")"', source)
+        self.assertIn('TINYMEMES_MODULE="$staged_env_path" cargo test', source)
+        self.assertIn('TINYMEMES_MODULE="$staged_env_path" cargo run', source)
+        self.assertIn('scripts/test-remix-markers.sh', source)
+        self.assertNotIn('chmod 700 "$root/target/debug', source)
+
+        verifier = (ROOT / "scripts/verify-module.ps1").read_text()
+        self.assertIn("Join-Path $gitRoot 'bin/bash.exe'", verifier)
+        self.assertIn("Get-Command bash -CommandType Application", verifier)
+        self.assertIn("& $bash 'scripts/test-module-e2e.sh'", verifier)
+
+    @unittest.skipUnless(os.name == "posix", "The corrupting cp fixture uses a POSIX script shim")
+    def test_module_e2e_rejects_staged_hash_mismatch_before_native_consumers(self):
+        (ROOT / "target").mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="module-stage-mismatch-", dir=ROOT / "target") as temp:
+            scratch = Path(temp)
+            source = scratch / "libtinymemes_module.so"
+            source.write_bytes(b"source module bytes")
+
+            spy_bin = scratch / "bin"
+            spy_bin.mkdir()
+            real_cp = shutil.which("cp")
+            self.assertIsNotNone(real_cp)
+            corrupting_cp = spy_bin / "cp"
+            corrupting_cp.write_text(
+                f"#!{sys.executable}\n"
+                "import os, pathlib, subprocess, sys\n"
+                "subprocess.run([os.environ['REAL_CP'], *sys.argv[1:]], check=True)\n"
+                "with pathlib.Path(sys.argv[-1]).open('ab') as staged: staged.write(b'corruption')\n"
+            )
+            corrupting_cp.chmod(0o755)
+            cargo_log = scratch / "cargo-was-called"
+            cargo = spy_bin / "cargo"
+            cargo.write_text("#!/bin/sh\necho called >> \"$CARGO_SPY_LOG\"\n")
+            cargo.chmod(0o755)
+
+            environment = dict(os.environ)
+            environment.update(
+                TINYMEMES_MODULE=str(source),
+                REAL_CP=real_cp,
+                CARGO_SPY_LOG=str(cargo_log),
+                PATH=f"{spy_bin}{os.pathsep}{environment['PATH']}",
+            )
+            result = run_bash(
+                "scripts/test-module-e2e.sh",
+                cwd=ROOT,
+                env=environment,
+            )
+            self.assertNotEqual(result.returncode, 0, bash_diagnostic(result))
+            self.assertIn("staged module artifact hash differs", result.stderr, bash_diagnostic(result))
+            self.assertFalse(cargo_log.exists(), bash_diagnostic(result))
 
 
 if __name__ == "__main__":

@@ -2,12 +2,16 @@
 from pathlib import Path
 import os
 import subprocess
+import sys
 import tempfile
 import tomllib
 import unittest
 import re
+import shutil
 from types import SimpleNamespace
 from unittest.mock import patch
+sys.dont_write_bytecode = True
+from test_support import bash_command, bash_diagnostic, git_bash_executable, run_bash
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -45,17 +49,15 @@ class PublishedSdkProfile(unittest.TestCase):
             "REVIEWED_PR": "",
             **overrides,
         })
-        with tempfile.TemporaryDirectory(prefix="release-router-") as scratch:
+        (ROOT / "target").mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="release-router-", dir=ROOT / "target") as scratch:
             output = Path(scratch) / "github-output"
             output.touch()
-            environment["GITHUB_OUTPUT"] = str(output)
-            result = subprocess.run(
-                ["bash", str(ROOT / "scripts/resolve-release-mode.sh")],
+            environment["GITHUB_OUTPUT"] = output.relative_to(ROOT).as_posix()
+            result = run_bash(
+                "scripts/resolve-release-mode.sh",
                 cwd=ROOT,
                 env=environment,
-                text=True,
-                capture_output=True,
-                check=False,
             )
             values = dict(
                 line.split("=", 1)
@@ -81,7 +83,7 @@ class PublishedSdkProfile(unittest.TestCase):
         for inputs, expected in valid:
             with self.subTest(inputs=inputs):
                 result, outputs = self.resolve_release(**inputs)
-                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.returncode, 0, bash_diagnostic(result))
                 for key, value in expected.items():
                     self.assertEqual(outputs.get(key), value)
 
@@ -132,7 +134,7 @@ class PublishedSdkProfile(unittest.TestCase):
             with self.subTest(invalid=inputs):
                 result, _ = self.resolve_release(**inputs)
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn(expected_error, result.stderr)
+                self.assertIn(expected_error, result.stderr, bash_diagnostic(result))
 
         release = (ROOT / ".github/workflows/release.yml").read_text()
         self.assertIn("reviewed-module-release:", release)
@@ -147,6 +149,37 @@ class PublishedSdkProfile(unittest.TestCase):
         self.assertIn("github.event_name == 'workflow_dispatch'", release)
         self.assertIn("github.ref == 'refs/heads/main' && needs.resolve.outputs.mode == 'main'", release)
         self.assertIn("github.ref == 'refs/heads/epic/8056-modules-wiring' && needs.resolve.outputs.mode == 'reviewed-epic'", release)
+
+    def test_git_bash_selection_ignores_poisoned_bare_bash_path(self):
+        with tempfile.TemporaryDirectory(prefix="bash-selection-") as scratch:
+            scratch = Path(scratch)
+            poison = scratch / "poison"
+            git_root = scratch / "Git"
+            git_bin = git_root / "bin"
+            git_cmd = git_root / "cmd"
+            poison.mkdir()
+            git_bin.mkdir(parents=True)
+            git_cmd.mkdir()
+
+            executable_suffix = ".exe" if os.name == "nt" else ""
+            poisoned_bash = poison / f"bash{executable_suffix}"
+            poisoned_bash.write_bytes(b"poisoned bare Bash selector")
+            poisoned_bash.chmod(0o755)
+            git_executable = git_cmd / f"git{executable_suffix}"
+            git_executable.write_bytes(b"Git executable selector fixture")
+            git_executable.chmod(0o755)
+            selected_bash = git_bin / "bash.exe"
+            selected_bash.write_bytes(b"selected Git Bash fixture")
+            path = os.pathsep.join((str(poison), str(git_cmd)))
+
+            self.assertEqual(shutil.which("bash", path=path), str(poisoned_bash))
+            self.assertEqual(
+                git_bash_executable(path=path, windows=True),
+                str(selected_bash),
+            )
+            command = bash_command("scripts/resolve-release-mode.sh", path=path, windows=True)
+            self.assertEqual(command[0], str(selected_bash))
+            self.assertEqual(command[1], "scripts/resolve-release-mode.sh")
 
     def test_git_executable_mode_survives_windows_filesystem_mode_bits(self):
         with patch.object(Path, "stat", return_value=SimpleNamespace(st_mode=0o100644)):
