@@ -9,6 +9,8 @@ use tinymemes_bus::{DeliverRequest, HostResult, IndexKind, SearchResult};
 struct Scripted {
     evaluate: HostResult<serde_json::Value>,
     calls: Mutex<Vec<&'static str>>,
+    search_result: HostResult<Vec<SearchResult>>,
+    search_request: Mutex<Option<SearchRequest>>,
 }
 
 impl Scripted {
@@ -16,6 +18,12 @@ impl Scripted {
         Arc::new(Self {
             evaluate,
             calls: Mutex::new(Vec::new()),
+            search_result: Ok(vec![SearchResult {
+                title: "guide".into(),
+                url: "https://example.test/guide".into(),
+                snippet: Some("snippet".into()),
+            }]),
+            search_request: Mutex::new(None),
         })
     }
 }
@@ -32,8 +40,10 @@ impl Host for Scripted {
         self.calls.lock().unwrap().push("evaluate");
         self.evaluate.clone()
     }
-    async fn search(&self, _: SearchRequest) -> HostResult<Vec<SearchResult>> {
-        Ok(Vec::new())
+    async fn search(&self, request: SearchRequest) -> HostResult<Vec<SearchResult>> {
+        self.calls.lock().unwrap().push("search");
+        *self.search_request.lock().unwrap() = Some(request);
+        self.search_result.clone()
     }
     async fn load_index(&self, _: IndexKind) -> HostResult<Option<String>> {
         Ok(None)
@@ -46,6 +56,25 @@ impl Host for Scripted {
     }
     async fn end(&self) -> HostResult<()> {
         Ok(())
+    }
+}
+
+struct EmptySource;
+
+#[async_trait]
+impl MemeSource for EmptySource {
+    fn name(&self) -> &'static str {
+        "empty"
+    }
+
+    async fn search(
+        &self,
+        _: &str,
+        _: tinymemes::Intent,
+        _: &tinymemes::Region,
+        _: usize,
+    ) -> std::result::Result<Vec<tinymemes::Meme>, BoxError> {
+        Ok(Vec::new())
     }
 }
 
@@ -116,4 +145,88 @@ async fn the_host_jev_answer_is_used_when_it_has_one() {
         .unwrap();
     assert_eq!(response.model, "jev-latest");
     assert!(!host.calls.lock().unwrap().contains(&"complete"));
+}
+
+#[tokio::test]
+async fn host_search_saturates_limits_and_maps_wire_hits() {
+    let host = Scripted::new(Err(HostFailure::Unsupported));
+    let shared: SharedHost = host.clone();
+    let hits = HostSearch(shared).search("term", usize::MAX).await.unwrap();
+    assert_eq!(
+        hits,
+        [SearchHit {
+            title: "guide".into(),
+            url: "https://example.test/guide".into(),
+            snippet: Some("snippet".into()),
+        }]
+    );
+    assert_eq!(
+        host.search_request
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .max_results,
+        u32::MAX
+    );
+}
+
+#[test]
+fn engine_build_uses_host_fallback_and_env_overrides_without_network_calls() {
+    let request = |research, cooldown| RemixRequest {
+        conversation: Vec::new(),
+        reply: "reply".into(),
+        region: Some("global".into()),
+        enabled: true,
+        timeout_ms: 20_000,
+        deliver: false,
+        correlation: "build-test".into(),
+        reply_id: None,
+        options: tinymemes_bus::RemixOptions {
+            meme_cooldown_turns: cooldown,
+            research,
+        },
+    };
+    let host = Scripted::new(Err(HostFailure::Unsupported));
+    let shared: SharedHost = host.clone();
+    let build = |env: EnvConfig, request: RemixRequest| {
+        let deps = Deps {
+            env,
+            source: Arc::new(EmptySource),
+        };
+        let _built = super::build(
+            &shared,
+            &request,
+            &deps,
+            SlangIndex::default(),
+            MemeIndex::default(),
+        );
+    };
+
+    build(EnvConfig::default(), request(false, Some(0)));
+    build(
+        EnvConfig::from_lookup(|name| match name {
+            "TINYMEMES_JEV" => Some("typesafe".into()),
+            _ => None,
+        }),
+        request(true, None),
+    );
+    build(
+        EnvConfig::from_lookup(|name| match name {
+            "TINYMEMES_JEV" => Some("openrouter".into()),
+            "TINYMEMES_OPENROUTER_KEY" => Some("test-only-key".into()),
+            "TINYMEMES_MODEL" => Some("fixture-model".into()),
+            _ => None,
+        }),
+        request(true, Some(1)),
+    );
+    build(
+        EnvConfig::from_lookup(|name| match name {
+            "TINYMEMES_JEV" => Some("llm".into()),
+            "TINYMEMES_OPENROUTER_KEY" => Some("test-only-key".into()),
+            _ => None,
+        }),
+        request(false, None),
+    );
+    assert!(host.calls.lock().unwrap().is_empty());
 }

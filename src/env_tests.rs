@@ -50,6 +50,58 @@ fn explicit_modes_pick_routes_or_fail_loudly() {
 
 #[test]
 fn debug_never_prints_keys() {
-    let c = cfg(&[("TINYMEMES_OPENROUTER_KEY", "sk-secret")]);
-    assert!(!format!("{c:?}").contains("sk-secret"));
+    let c = cfg(&[
+        ("TINYMEMES_OPENROUTER_KEY", "sk-openrouter"),
+        ("TINYMEMES_TYPESAFE_KEY", "sk-typesafe"),
+        ("TINYMEMES_OPENJEV_KEY", "sk-openjev"),
+    ]);
+    let debug = format!("{c:?}");
+    for secret in ["sk-openrouter", "sk-typesafe", "sk-openjev"] {
+        assert!(!debug.contains(secret));
+    }
+    assert!(debug.contains("<set>"));
+}
+
+#[test]
+fn mode_spellings_and_standard_key_fallbacks_are_supported() {
+    for (mode, expected) in [
+        ("OpenJev", JevMode::OpenJev),
+        ("open_jev", JevMode::OpenJev),
+        ("off", JevMode::Llm),
+        ("none", JevMode::Llm),
+        ("future-mode", JevMode::Auto),
+    ] {
+        let c = cfg(&[("TINYMEMES_JEV", mode)]);
+        assert_eq!(c.jev, Some(expected), "mode {mode:?}");
+    }
+    let c = cfg(&[
+        ("TYPESAFE_API_KEY", " fallback-ts "),
+        ("OPENJEV_API_KEY", "fallback-jev"),
+    ]);
+    assert_eq!(c.typesafe_key.as_deref(), Some("fallback-ts"));
+    assert_eq!(c.openjev_key.as_deref(), Some("fallback-jev"));
+    assert_eq!(c.jev().unwrap().unwrap().1, "typesafe");
+    assert_eq!(cfg(&[("TINYMEMES_JEV", "")]).jev, None);
+}
+
+#[test]
+fn explicit_routes_require_their_own_credentials_and_llm_mode_has_no_jev() {
+    for mode in ["typesafe", "openjev", "openrouter"] {
+        let c = cfg(&[("TINYMEMES_JEV", mode)]);
+        assert!(c.jev().is_err(), "missing credential for {mode}");
+    }
+    let c = cfg(&[("TINYMEMES_JEV", "llm"), ("TINYMEMES_OPENROUTER_KEY", "or")]);
+    assert!(c.forces_llm_jev());
+    assert!(c.jev().unwrap().is_none());
+}
+
+#[test]
+fn configured_chat_and_web_clients_share_model_selection() {
+    let c = cfg(&[
+        ("TINYMEMES_OPENROUTER_KEY", "key"),
+        ("TINYMEMES_MODEL", "mymodel"),
+    ]);
+    let http = reqwest::Client::new();
+    assert!(c.chat_model(&http).is_some());
+    assert!(c.web_researcher(&http).is_some());
 }

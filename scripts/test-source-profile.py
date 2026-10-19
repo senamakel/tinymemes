@@ -35,10 +35,7 @@ class PublishedSdkProfile(unittest.TestCase):
                             self.assertEqual(dependency["rev"], SDK_REV)
                             self.assertEqual(dependency["version"], ">=0.3.3, <0.4.0")
 
-    def test_standalone_patch_and_nested_gitlink_share_the_published_sdk(self):
-        patch = manifest("Cargo.toml")["patch"]["https://github.com/tinyhumansai/tinybus"]
-        self.assertEqual(patch["tinybus"]["path"], "vendor/tinybus/crates/tinybus")
-        self.assertEqual(patch["tinybus-module"]["path"], "vendor/tinybus/crates/tinybus-module")
+    def test_nested_gitlink_matches_the_published_sdk_revision(self):
         rev = subprocess.run(
             ["git", "-C", str(ROOT / "vendor/tinybus"), "rev-parse", "HEAD"],
             text=True,

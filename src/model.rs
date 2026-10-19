@@ -115,3 +115,7 @@ impl ChatModel for OpenAiCompatible {
             .ok_or_else(|| "model returned no content".into())
     }
 }
+
+#[cfg(test)]
+#[path = "model_tests.rs"]
+mod tests;

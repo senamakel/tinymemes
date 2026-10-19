@@ -12,9 +12,9 @@ off-by-default `test-util` feature; `tinymemes-bus/storage` enables only the
 ports-only core with default features disabled. The bus adds storage-needs
 declarations, while its legacy `DocumentClient` remains available behind the
 explicit `client` feature. The module enables that client explicitly. Its
-standalone manifest pins SDK v0.3.3 and patches the canonical Git source to the
-same nested SDK checkout; its compatible v0.3 range also lets a host workspace
-unify it with an additive TinyBus release.
+standalone manifest pins TinyBus v0.3.3 at the canonical Git revision, without
+a local path patch; a host workspace may apply its own root patch to unify the
+SDK with an additive TinyBus release.
 
 | v1 | v2 | Scope class | Change |
 |---|---|---|---|

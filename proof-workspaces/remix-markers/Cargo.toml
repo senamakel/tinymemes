@@ -2,9 +2,5 @@
 members = ["runner"]
 resolver = "3"
 
-[patch."https://github.com/tinyhumansai/tinybus"]
-tinybus = { path = "../../vendor/tinybus/crates/tinybus" }
-tinybus-module = { path = "../../vendor/tinybus/crates/tinybus-module" }
-
 [profile.dev]
 debug = false

@@ -5,7 +5,7 @@
 //! The artifact is built with `cargo build -p tinymemes-module` unless
 //! `TINYMEMES_MODULE` points at one (the path override CI and hosts use).
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -14,32 +14,16 @@ use tinybus::module::ModuleHost;
 use tinybus::transport::memory::MemoryBus;
 use tinybus::{CallContext, Connection, InterfaceName, MemberName, ObjectPath};
 use tinymemes_bus::{
-    HOST_INTERFACE, HOST_METHODS, HOST_PATH, HostFailure, RemixRequest, host_methods,
+    ApplyRequest, ContentOperation, ContentState, HOST_INTERFACE, HOST_METHODS, HOST_PATH,
+    HostFailure, RemixRequest, host_methods,
 };
-use tinymemes_client::RemixClient;
+use tinymemes_client::{RemixClient, StateClient};
+
+#[path = "support/native_artifact.rs"]
+mod native_artifact;
 
 fn artifact() -> PathBuf {
-    if let Some(path) = std::env::var_os("TINYMEMES_MODULE") {
-        return PathBuf::from(path);
-    }
-    let exe = std::env::current_exe().unwrap();
-    let profile_dir = exe.parent().and_then(Path::parent).unwrap().to_owned();
-    let name = format!(
-        "{}tinymemes_module{}",
-        std::env::consts::DLL_PREFIX,
-        std::env::consts::DLL_SUFFIX
-    );
-    let path = profile_dir.join(&name);
-    if !path.exists() {
-        let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-        let mut build = std::process::Command::new(cargo);
-        build.args(["build", "--package", "tinymemes-module"]);
-        if profile_dir.ends_with("release") {
-            build.arg("--release");
-        }
-        assert!(build.status().unwrap().success(), "build the module");
-    }
-    path
+    native_artifact::artifact()
 }
 
 /// One callback as the host saw it.
@@ -217,6 +201,84 @@ fn request(correlation: &str) -> RemixRequest {
     .unwrap()
 }
 
+#[test]
+fn cargo_artifact_selection_accepts_compact_local_package_ids_only_for_the_module_source() {
+    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs");
+    let compact = serde_json::json!({
+        "reason": "compiler-artifact",
+        "package_id": "path+file:///work/crates/tinymemes-module#0.4.2",
+        "target": { "name": "tinymemes_module", "src_path": source, "crate_types": ["cdylib"] },
+        "features": [],
+        "filenames": ["/build/libtinymemes_module.dylib"]
+    });
+    let expanded = serde_json::json!({
+        "reason": "compiler-artifact",
+        "package_id": "path+file:///work/crates/tinymemes-module#tinymemes-module@0.4.2",
+        "target": { "name": "tinymemes_module", "src_path": source, "crate_types": ["cdylib"] },
+        "features": [],
+        "filenames": ["/build/expanded/libtinymemes_module.dylib"]
+    });
+    let foreign = serde_json::json!({
+        "reason": "compiler-artifact",
+        "package_id": "path+file:///other/crates/tinymemes-module#0.4.2",
+        "target": { "name": "tinymemes_module", "src_path": "/other/src/lib.rs", "crate_types": ["cdylib"] },
+        "features": [],
+        "filenames": ["/build/foreign/libtinymemes_module.dylib"]
+    });
+    let static_link = serde_json::json!({
+        "reason": "compiler-artifact",
+        "package_id": "path+file:///work/crates/tinymemes-module#0.4.2",
+        "target": { "name": "tinymemes_module", "src_path": source, "crate_types": ["cdylib"] },
+        "features": ["static-link"],
+        "filenames": ["/build/static/libtinymemes_module.dylib"]
+    });
+    let non_cdylib = serde_json::json!({
+        "reason": "compiler-artifact",
+        "package_id": "path+file:///work/crates/tinymemes-module#0.4.2",
+        "target": { "name": "tinymemes_module", "src_path": source, "crate_types": ["rlib"] },
+        "features": [],
+        "filenames": ["/build/rlib/libtinymemes_module.dylib"]
+    });
+    let compact_output = compact.to_string();
+    assert_eq!(
+        native_artifact::select_dynamic_module_artifact(
+            &compact_output,
+            &source,
+            "libtinymemes_module.dylib",
+        )
+        .unwrap(),
+        PathBuf::from("/build/libtinymemes_module.dylib")
+    );
+    let output = [foreign, expanded, non_cdylib]
+        .iter()
+        .map(serde_json::Value::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_eq!(
+        native_artifact::select_dynamic_module_artifact(
+            &output,
+            &source,
+            "libtinymemes_module.dylib",
+        )
+        .unwrap(),
+        PathBuf::from("/build/expanded/libtinymemes_module.dylib")
+    );
+    let output = [serde_json::from_str(&compact_output).unwrap(), static_link]
+        .iter()
+        .map(serde_json::Value::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        native_artifact::select_dynamic_module_artifact(
+            &output,
+            &source,
+            "libtinymemes_module.dylib",
+        )
+        .unwrap_err()
+        .contains("static-link")
+    );
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_compiled_module_remixes_through_the_hosts_callbacks_with_a_correlation_id() {
     let (_host, caller, _task, _dir) = load().await;
@@ -229,6 +291,22 @@ async fn the_compiled_module_remixes_through_the_hosts_callbacks_with_a_correlat
         .await
         .unwrap();
     let client = RemixClient::new(&caller).unwrap();
+    assert!(format!("{client:?}").contains("RemixClient { .. }"));
+    let state_client = StateClient::new(&caller).unwrap();
+    assert!(format!("{state_client:?}").contains("StateClient { .. }"));
+    let applied = state_client
+        .apply(ApplyRequest {
+            state: ContentState::default(),
+            expected_revision: 0,
+            operation: ContentOperation::MarkRemixed {
+                reply_id: "state-client-reply".into(),
+            },
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(applied.revision, 1);
+    assert_eq!(applied.remixed, ["state-client-reply"]);
     let mut response = None;
     for _ in 0..50 {
         match client.remix(request("corr-e2e-1")).await {

@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use serde_json::json;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use tinybus::{
@@ -11,6 +13,9 @@ use tinymemes_client::RemixMarkerClient;
 use tinystoragedrivers_core::{DocumentStore, MemoryStorage, Precondition, Scope, StorageBackend};
 use tinystoragedrivers_tinybus::{endpoint, serve_collection};
 
+#[path = "support/native_artifact.rs"]
+mod native_artifact;
+
 const COLLECTION: &str = "remix_markers";
 struct Fixture {
     host: Option<ModuleHost>,
@@ -23,9 +28,7 @@ struct Fixture {
 }
 impl Fixture {
     async fn new(documents: Arc<dyn DocumentStore>) -> Self {
-        let artifact = PathBuf::from(
-            std::env::var_os("TINYMEMES_MODULE").expect("run scripts/test-remix-markers.sh"),
-        );
+        let artifact = native_artifact::artifact();
         let hash = tinybus::module::sha256_file(&artifact).unwrap();
         let directory = tempfile::tempdir_in(artifact.parent().unwrap()).unwrap();
         let filename = artifact.file_name().unwrap();
@@ -90,6 +93,29 @@ fn request(id: &str) -> MarkerRequest {
     }
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn marker_client_refuses_a_host_callback_for_another_interface() {
+    let backend = MemoryStorage::new();
+    let scoped = backend
+        .for_scope(&Scope::new("marker-interface").unwrap())
+        .unwrap();
+    let fixture = Fixture::new(scoped.documents().clone()).await;
+    let peer = fixture
+        .binding
+        .guard()
+        .module_peer()
+        .unwrap()
+        .as_str()
+        .to_owned();
+    let wrong_interface = fixture
+        .binding
+        .proxy(&peer, MARKER_PATH, HOST_INTERFACE)
+        .unwrap();
+
+    let error = RemixMarkerClient::new(wrong_interface).unwrap_err();
+    assert!(error.to_string().contains("marker interface mismatch"));
+}
+
 async fn marker_roundtrip(backend: Arc<dyn StorageBackend>) {
     let alice = backend.for_scope(&Scope::new("alice").unwrap()).unwrap();
     let bob = backend.for_scope(&Scope::new("bob").unwrap()).unwrap();
@@ -137,6 +163,7 @@ async fn marker_roundtrip(backend: Arc<dyn StorageBackend>) {
             .unwrap()
     );
 }
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn memory_marker_is_native_reopened_and_scope_isolated() {
     marker_roundtrip(Arc::new(MemoryStorage::new())).await;

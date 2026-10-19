@@ -30,10 +30,15 @@ tinybus = { version = ">=0.3.3, <0.4.0", git = "https://github.com/tinyhumansai/
 tinybus-module = { version = ">=0.3.3, <0.4.0", git = "https://github.com/tinyhumansai/tinybus", rev = "207a9a7df15e44fdba00a807d0f7eaf21904ba0e" }
 
 [dev-dependencies]
-tinymemes-client = { path = "../tinymemes-client" }
+tinymemes-client = { path = "../tinymemes-client", features = ["host-callback"] }
 sha2 = "0.10"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tinybus = { version = ">=0.3.3, <0.4.0", git = "https://github.com/tinyhumansai/tinybus", rev = "207a9a7df15e44fdba00a807d0f7eaf21904ba0e", default-features = false, features = ["modules"] }
+tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.6.0" }
+tinystoragedrivers-core = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.6.0" }
+tinystoragedrivers-tinybus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.6.0" }
+tinystoragedrivers-sqlite = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.6.0" }
+tempfile = "3"
 
 [lints.rust]
 missing_docs = "warn"
@@ -47,3 +52,7 @@ all = { level = "warn", priority = -1 }
 name = "static_link"
 path = "tests/static_link.rs"
 required-features = ["static-link"]
+
+[[test]]
+name = "remix_markers"
+path = "tests/remix_markers.rs"

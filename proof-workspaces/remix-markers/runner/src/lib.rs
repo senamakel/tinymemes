@@ -1,4 +1,4 @@
-//! Opt-in compiled module/native-port evidence. Depends on unpublished TSD PR 27.
+//! Opt-in compiled module/native-port evidence using released TinyStorageDrivers 1.6.0.
 #[cfg(test)]
-#[path = "lib_tests.rs"]
+#[path = "../../../../crates/tinymemes-module/tests/remix_markers.rs"]
 mod tests;

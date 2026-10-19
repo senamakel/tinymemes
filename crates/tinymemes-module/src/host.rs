@@ -106,3 +106,7 @@ impl Host for BusHost {
 }
 
 pub(crate) type SharedHost = Arc<dyn Host>;
+
+#[cfg(test)]
+#[path = "host_tests.rs"]
+mod tests;

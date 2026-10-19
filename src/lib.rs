@@ -139,11 +139,18 @@ impl MemeEngine {
     /// (`TINYMEMES_OPENROUTER_KEY`, else `OPENROUTER_API_KEY`), Jev from the
     /// configured route, or the LLM fallback when there is none.
     pub fn from_env() -> Result<MemeEngineBuilder> {
-        let mut env = EnvConfig::from_env();
+        Self::from_standalone_config(
+            EnvConfig::from_env(),
+            std::env::var("OPENROUTER_API_KEY").ok(),
+        )
+    }
+
+    fn from_standalone_config(
+        mut env: EnvConfig,
+        openrouter_fallback: Option<String>,
+    ) -> Result<MemeEngineBuilder> {
         if env.openrouter_key.is_none() {
-            env.openrouter_key = std::env::var("OPENROUTER_API_KEY")
-                .ok()
-                .filter(|k| !k.is_empty());
+            env.openrouter_key = openrouter_fallback.filter(|key| !key.is_empty());
         }
         let http = reqwest::Client::new();
         let model = env.chat_model(&http).ok_or_else(|| {
@@ -556,3 +563,7 @@ impl MemeEngineBuilder {
 }
 
 pub mod state;
+
+#[cfg(test)]
+#[path = "lib_tests.rs"]
+mod tests;

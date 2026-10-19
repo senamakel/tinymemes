@@ -47,6 +47,8 @@ pub trait MemeSource: Send + Sync {
 pub struct Imgflip {
     http: reqwest::Client,
     templates: OnceCell<Vec<Meme>>,
+    #[cfg(test)]
+    endpoint: String,
 }
 
 impl Imgflip {
@@ -55,6 +57,8 @@ impl Imgflip {
         Self {
             http,
             templates: OnceCell::new(),
+            #[cfg(test)]
+            endpoint: "https://api.imgflip.com/get_memes".to_owned(),
         }
     }
 
@@ -63,6 +67,8 @@ impl Imgflip {
         Self {
             http: reqwest::Client::new(),
             templates: OnceCell::new_with(Some(templates)),
+            #[cfg(test)]
+            endpoint: "https://api.imgflip.com/get_memes".to_owned(),
         }
     }
 
@@ -84,9 +90,13 @@ impl Imgflip {
         let list = self
             .templates
             .get_or_try_init(|| async {
+                #[cfg(test)]
+                let endpoint = self.endpoint.as_str();
+                #[cfg(not(test))]
+                let endpoint = "https://api.imgflip.com/get_memes";
                 let resp: Resp = self
                     .http
-                    .get("https://api.imgflip.com/get_memes")
+                    .get(endpoint)
                     .send()
                     .await?
                     .error_for_status()?
@@ -152,6 +162,8 @@ impl MemeSource for Imgflip {
 pub struct Giphy {
     http: reqwest::Client,
     api_key: String,
+    #[cfg(test)]
+    endpoint: String,
 }
 
 impl Giphy {
@@ -160,6 +172,8 @@ impl Giphy {
         Self {
             http,
             api_key: api_key.into(),
+            #[cfg(test)]
+            endpoint: "https://api.giphy.com/v1/gifs/search".to_owned(),
         }
     }
 }
@@ -204,9 +218,13 @@ impl MemeSource for Giphy {
         if let Some(lang) = &region.giphy_lang {
             params.push(("lang", lang.as_str()));
         }
+        #[cfg(test)]
+        let endpoint = self.endpoint.as_str();
+        #[cfg(not(test))]
+        let endpoint = "https://api.giphy.com/v1/gifs/search";
         let resp: Resp = self
             .http
-            .get("https://api.giphy.com/v1/gifs/search")
+            .get(endpoint)
             .query(&params)
             .send()
             .await?
@@ -231,6 +249,8 @@ impl MemeSource for Giphy {
 pub struct Tenor {
     http: reqwest::Client,
     api_key: String,
+    #[cfg(test)]
+    endpoint: String,
 }
 
 impl Tenor {
@@ -239,6 +259,8 @@ impl Tenor {
         Self {
             http,
             api_key: api_key.into(),
+            #[cfg(test)]
+            endpoint: "https://tenor.googleapis.com/v2/search".to_owned(),
         }
     }
 }
@@ -287,9 +309,13 @@ impl MemeSource for Tenor {
         if region.code.len() == 2 && region.code != "XX" {
             params.push(("country", region.code.as_str()));
         }
+        #[cfg(test)]
+        let endpoint = self.endpoint.as_str();
+        #[cfg(not(test))]
+        let endpoint = "https://tenor.googleapis.com/v2/search";
         let resp: Resp = self
             .http
-            .get("https://tenor.googleapis.com/v2/search")
+            .get(endpoint)
             .query(&params)
             .send()
             .await?

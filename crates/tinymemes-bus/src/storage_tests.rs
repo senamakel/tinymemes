@@ -150,7 +150,10 @@ async fn the_step_preserves_document_expiry_metadata() {
 
     migrated(&storage).await;
 
-    assert_eq!(v2(&storage, "slang").await.unwrap().meta.expires_ms, Some(9_999));
+    assert_eq!(
+        v2(&storage, "slang").await.unwrap().meta.expires_ms,
+        Some(9_999)
+    );
 }
 
 #[tokio::test]
