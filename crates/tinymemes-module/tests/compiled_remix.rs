@@ -231,6 +231,34 @@ fn request(correlation: &str) -> RemixRequest {
 }
 
 #[test]
+fn cargo_artifact_selection_accepts_a_real_source_path_alias() {
+    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs");
+    let alias_source = PathBuf::from(format!(
+        "{}{sep}.{sep}lib.rs",
+        source.parent().unwrap().display(),
+        sep = std::path::MAIN_SEPARATOR,
+    ));
+    assert!(alias_source.is_file());
+    assert_ne!(alias_source.to_string_lossy(), source.to_string_lossy());
+    let alias = serde_json::json!({
+        "reason": "compiler-artifact",
+        "package_id": "path+file:///work/crates/tinymemes-module#0.4.2",
+        "target": { "name": "tinymemes_module", "src_path": alias_source, "crate_types": ["cdylib"] },
+        "features": [],
+        "filenames": ["/build/alias/libtinymemes_module.dylib"]
+    });
+    assert_eq!(
+        native_artifact::select_dynamic_module_artifact(
+            &alias.to_string(),
+            &source,
+            "libtinymemes_module.dylib",
+        )
+        .unwrap(),
+        PathBuf::from("/build/alias/libtinymemes_module.dylib")
+    );
+}
+
+#[test]
 fn cargo_artifact_selection_accepts_compact_local_package_ids_only_for_the_module_source() {
     let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs");
     let compact = serde_json::json!({
@@ -269,6 +297,29 @@ fn cargo_artifact_selection_accepts_compact_local_package_ids_only_for_the_modul
         "filenames": ["/build/rlib/libtinymemes_module.dylib"]
     });
     let compact_output = compact.to_string();
+    let foreign_error = native_artifact::select_dynamic_module_artifact(
+        &foreign.to_string(),
+        &source,
+        "libtinymemes_module.dylib",
+    )
+    .unwrap_err();
+    assert!(
+        foreign_error.contains("reason=compiler-artifact"),
+        "{foreign_error}"
+    );
+    assert!(
+        foreign_error.contains("target.name=Some(\"tinymemes_module\")"),
+        "{foreign_error}"
+    );
+    assert!(
+        foreign_error.contains("target.src_path=Some(\"/other/src/lib.rs\")"),
+        "{foreign_error}"
+    );
+    assert!(
+        foreign_error.contains("features=Some([])"),
+        "{foreign_error}"
+    );
+    assert!(!foreign_error.contains("package_id"), "{foreign_error}");
     assert_eq!(
         native_artifact::select_dynamic_module_artifact(
             &compact_output,

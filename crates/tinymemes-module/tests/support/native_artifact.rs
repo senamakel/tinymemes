@@ -64,14 +64,48 @@ pub fn select_dynamic_module_artifact(
     expected_source: &Path,
     library_name: &str,
 ) -> Result<PathBuf, String> {
+    let expected_source_identity = std::fs::canonicalize(expected_source).map_err(|error| {
+        format!(
+            "could not resolve expected module source {:?}: {error}",
+            expected_source
+        )
+    })?;
     let mut artifact = None;
+    let mut candidate_diagnostics = Vec::new();
     for line in output.lines() {
         let Ok(message) = serde_json::from_str::<serde_json::Value>(line) else {
             continue;
         };
-        if message["reason"] != "compiler-artifact"
-            || message["target"]["src_path"] != expected_source.to_string_lossy().as_ref()
-            || message["target"]["name"] != "tinymemes_module"
+        if message["reason"] != "compiler-artifact" {
+            continue;
+        }
+        let target = &message["target"];
+        let target_name = target["name"].as_str();
+        let target_source = target["src_path"].as_str();
+        let target_crate_types = target["crate_types"].as_array();
+        let features = message["features"].as_array();
+        let filenames = message["filenames"].as_array();
+        let source_looks_owned = target_source.is_some_and(|source| {
+            source
+                .replace('\\', "/")
+                .to_ascii_lowercase()
+                .ends_with("/crates/tinymemes-module/src/lib.rs")
+        });
+        if (target_name == Some("tinymemes_module") || source_looks_owned)
+            && candidate_diagnostics.len() < 3
+        {
+            candidate_diagnostics.push(format!(
+                "reason=compiler-artifact target.name={:?} target.src_path={:?} \
+                 target.crate_types={:?} features={:?} filenames={:?}",
+                target_name, target_source, target_crate_types, features, filenames,
+            ));
+        }
+
+        let source_matches = target_source
+            .and_then(|source| std::fs::canonicalize(source).ok())
+            .is_some_and(|source| source == expected_source_identity);
+        if !source_matches
+            || target_name != Some("tinymemes_module")
             || !message["target"]["crate_types"]
                 .as_array()
                 .is_some_and(|types| types.iter().any(|kind| kind == "cdylib"))
@@ -102,5 +136,12 @@ pub fn select_dynamic_module_artifact(
             }
         }
     }
-    artifact.ok_or_else(|| "Cargo did not report the dynamic module artifact".to_owned())
+    artifact.ok_or_else(|| {
+        let candidates = if candidate_diagnostics.is_empty() {
+            "no compiler-artifact target named tinymemes_module".to_owned()
+        } else {
+            candidate_diagnostics.join("; ")
+        };
+        format!("Cargo did not report the dynamic module artifact; candidates: {candidates}")
+    })
 }
