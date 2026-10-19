@@ -85,25 +85,54 @@ class PublishedSdkProfile(unittest.TestCase):
                 for key, value in expected.items():
                     self.assertEqual(outputs.get(key), value)
 
+        epic_ref = "refs/heads/epic/8056-modules-wiring"
         invalid = (
-            {"BUMP": ""},
-            {"BUMP": "wat"},
-            {"BUMP": "patch", "TAG": "v0.4.2"},
-            {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2"},
-            {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "0"},
-            {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "016"},
-            {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.3", "VERSION": "0.4.2", "REVIEWED_PR": "16"},
-            {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_EVENT_NAME": "push"},
-            {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_REF": "refs/heads/main"},
-            {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_REF": "refs/heads/feature"},
-            {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_REF": "refs/tags/v0.4.2"},
-            {"RELEASE_MODE": "main", "BUMP": "patch", "GITHUB_REF": "refs/heads/epic/8056-modules-wiring"},
-            {"RELEASE_MODE": "unknown", "BUMP": "patch"},
+            ({"BUMP": ""}, "main release requires bump"),
+            ({"BUMP": "wat"}, "main release requires bump"),
+            ({"BUMP": "patch", "TAG": "v0.4.2"}, "only valid in reviewed-epic mode"),
+            (
+                {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "GITHUB_REF": epic_ref},
+                "reviewed-pr must be a positive canonical PR number",
+            ),
+            (
+                {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "0", "GITHUB_REF": epic_ref},
+                "reviewed-pr must be a positive canonical PR number",
+            ),
+            (
+                {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "016", "GITHUB_REF": epic_ref},
+                "reviewed-pr must be a positive canonical PR number",
+            ),
+            (
+                {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.3", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_REF": epic_ref},
+                "reviewed-epic tag and version must match",
+            ),
+            (
+                {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_EVENT_NAME": "push", "GITHUB_REF": epic_ref},
+                "releases must be manually dispatched",
+            ),
+            (
+                {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_REF": "refs/heads/main"},
+                "reviewed-epic releases must be dispatched from epic/8056-modules-wiring",
+            ),
+            (
+                {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_REF": "refs/heads/feature"},
+                "reviewed-epic releases must be dispatched from epic/8056-modules-wiring",
+            ),
+            (
+                {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_REF": "refs/tags/v0.4.2"},
+                "reviewed-epic releases must be dispatched from epic/8056-modules-wiring",
+            ),
+            (
+                {"RELEASE_MODE": "main", "BUMP": "patch", "GITHUB_REF": epic_ref},
+                "main releases must be dispatched from main",
+            ),
+            ({"RELEASE_MODE": "unknown", "BUMP": "patch"}, "release_mode must be main or reviewed-epic"),
         )
-        for inputs in invalid:
+        for inputs, expected_error in invalid:
             with self.subTest(invalid=inputs):
                 result, _ = self.resolve_release(**inputs)
                 self.assertNotEqual(result.returncode, 0)
+                self.assertIn(expected_error, result.stderr)
 
         release = (ROOT / ".github/workflows/release.yml").read_text()
         self.assertIn("reviewed-module-release:", release)
