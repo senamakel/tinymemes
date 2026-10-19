@@ -3,6 +3,42 @@ use std::sync::OnceLock;
 
 static NATIVE_ARTIFACT: OnceLock<PathBuf> = OnceLock::new();
 
+/// Removes inherited access from a staged module directory on Windows.
+///
+/// The native loader rejects module directories writable by other users, so
+/// test fixtures must grant access only to the current runner account.
+pub fn secure_fixture_directory(path: &Path) {
+    #[cfg(windows)]
+    {
+        let identity = std::process::Command::new("powershell")
+            .args([
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
+            ])
+            .output()
+            .expect("PowerShell is available on Windows test runners");
+        assert!(
+            identity.status.success(),
+            "current-user SID query failed: {identity:?}"
+        );
+        let sid = String::from_utf8(identity.stdout).expect("SID output is UTF-8");
+        let grant = format!("*{}:(OI)(CI)F", sid.trim());
+        let acl = std::process::Command::new("icacls")
+            .arg(path)
+            .args(["/inheritance:r", "/grant:r"])
+            .arg(grant)
+            .output()
+            .expect("icacls is available on Windows test runners");
+        assert!(acl.status.success(), "private fixture ACL failed: {acl:?}");
+    }
+
+    #[cfg(not(windows))]
+    let _ = path;
+}
+
 pub fn artifact() -> PathBuf {
     if let Some(path) = std::env::var_os("TINYMEMES_MODULE") {
         return PathBuf::from(path);

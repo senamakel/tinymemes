@@ -33,6 +33,7 @@ impl Fixture {
         let directory = tempfile::tempdir_in(artifact.parent().unwrap()).unwrap();
         let filename = artifact.file_name().unwrap();
         let staged = directory.path().join(filename);
+        native_artifact::secure_fixture_directory(directory.path());
         std::fs::copy(&artifact, &staged).unwrap();
         std::fs::write(
             directory.path().join("modules.toml"),

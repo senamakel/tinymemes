@@ -297,13 +297,20 @@ class PackageVerification(unittest.TestCase):
         self.assertLess(gate, identity)
         self.assertLess(identity, acl)
 
-    def test_compiled_loader_windows_fixture_uses_private_inherited_acl(self):
-        source = (ROOT / "crates/tinymemes-module/tests/compiled_remix.rs").read_text()
-        helper = source.split("fn secure_windows_fixture_directory", 1)[1].split("\n    }", 1)[0]
-        self.assertIn("#[cfg(windows)]", source.split("fn secure_windows_fixture_directory", 1)[0][-40:])
+    def test_native_loader_fixtures_use_private_windows_directory_acl(self):
+        support = (ROOT / "crates/tinymemes-module/tests/support/native_artifact.rs").read_text()
+        helper = support.split("pub fn secure_fixture_directory", 1)[1].split("\n}", 1)[0]
         self.assertIn('"/inheritance:r", "/grant:r"', helper)
         self.assertIn('format!("*{}:(OI)(CI)F"', helper)
-        self.assertIn("secure_windows_fixture_directory(&path)", source)
+
+        compiled = (ROOT / "crates/tinymemes-module/tests/compiled_remix.rs").read_text()
+        self.assertIn("super::native_artifact::secure_fixture_directory(&path)", compiled)
+
+        markers = (ROOT / "crates/tinymemes-module/tests/remix_markers.rs").read_text()
+        fixture_setup = markers.split("impl Fixture {", 1)[1].split("    fn proxy_to", 1)[0]
+        secure = fixture_setup.index("native_artifact::secure_fixture_directory(directory.path())")
+        copy = fixture_setup.index("std::fs::copy(&artifact, &staged)")
+        self.assertLess(secure, copy)
 
     @unittest.skipUnless(shutil.which("pwsh"), "PowerShell is only installed on Windows CI")
     def test_git_bash_resolution_handles_cmd_and_mingw_bin_git_layouts(self):
