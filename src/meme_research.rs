@@ -59,6 +59,10 @@ pub struct GiphyPageResearcher {
     search: Arc<dyn WebSearch>,
     http: reqwest::Client,
     max_results: usize,
+    #[cfg(test)]
+    page_endpoint: Option<String>,
+    #[cfg(test)]
+    media_endpoint: Option<String>,
 }
 
 impl std::fmt::Debug for GiphyPageResearcher {
@@ -75,13 +79,21 @@ impl GiphyPageResearcher {
             search,
             http,
             max_results: 8,
+            #[cfg(test)]
+            page_endpoint: None,
+            #[cfg(test)]
+            media_endpoint: None,
         }
     }
 
     async fn read_page(&self, page_url: &str) -> Option<FoundMeme> {
+        #[cfg(test)]
+        let page_request_url = self.page_endpoint.as_deref().unwrap_or(page_url);
+        #[cfg(not(test))]
+        let page_request_url = page_url;
         let html = self
             .http
-            .get(page_url)
+            .get(page_request_url)
             .header("user-agent", "Mozilla/5.0 (compatible; tinymemes/0.1)")
             .timeout(Duration::from_secs(10))
             .send()
@@ -93,9 +105,13 @@ impl GiphyPageResearcher {
             .await
             .ok()?;
         let found = parse_giphy_page(page_url, &html)?;
+        #[cfg(test)]
+        let media_request_url = self.media_endpoint.as_deref().unwrap_or(&found.media_url);
+        #[cfg(not(test))]
+        let media_request_url = &found.media_url;
         let head = self
             .http
-            .head(&found.media_url)
+            .head(media_request_url)
             .timeout(Duration::from_secs(10))
             .send()
             .await

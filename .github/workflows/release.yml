@@ -3,14 +3,34 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      release_mode:
+        description: Release the next crate version or a reviewed epic module version
+        type: choice
+        required: true
+        default: main
+        options:
+          - main
+          - reviewed-epic
       bump:
         description: Version bump to release
         type: choice
-        required: true
+        required: false
         options:
           - patch
           - minor
           - major
+      tag:
+        description: Existing tag for a reviewed epic module release
+        type: string
+        required: false
+      version:
+        description: Module version without the leading v
+        type: string
+        required: false
+      reviewed-pr:
+        description: Canonical PR number whose merge commit is tagged
+        type: string
+        required: false
 
 concurrency:
   group: release-${{ github.ref_name }}
@@ -20,9 +40,52 @@ permissions:
   contents: write
 
 jobs:
+  resolve:
+    name: Validate release request
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/epic/8056-modules-wiring') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.route.outputs.mode }}
+      bump: ${{ steps.route.outputs.bump }}
+      tag: ${{ steps.route.outputs.tag }}
+      version: ${{ steps.route.outputs.version }}
+      reviewed_pr: ${{ steps.route.outputs.reviewed_pr }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - name: Validate release mode and inputs
+        id: route
+        shell: bash
+        env:
+          RELEASE_MODE: ${{ inputs.release_mode }}
+          BUMP: ${{ inputs.bump }}
+          TAG: ${{ inputs.tag }}
+          VERSION: ${{ inputs.version }}
+          REVIEWED_PR: ${{ inputs.reviewed-pr }}
+        run: scripts/resolve-release-mode.sh
+
+  reviewed-module-release:
+    name: Publish reviewed module release
+    needs: resolve
+    if: ${{ github.ref == 'refs/heads/epic/8056-modules-wiring' && needs.resolve.outputs.mode == 'reviewed-epic' }}
+    permissions:
+      contents: write
+      pull-requests: read
+      checks: read
+      actions: read
+    uses: tinyhumansai/.github/.github/workflows/module-reviewed-epic-release.yml@6ed83b04aab2d8977ec62e966cb914531e534fa4
+    with:
+      tag: ${{ needs.resolve.outputs.tag }}
+      version: ${{ needs.resolve.outputs.version }}
+      reviewed-pr: ${{ needs.resolve.outputs.reviewed_pr }}
+
   publish:
     name: Publish crate
-    if: ${{ github.ref == 'refs/heads/main' }}
+    needs: resolve
+    if: ${{ github.ref == 'refs/heads/main' && needs.resolve.outputs.mode == 'main' }}
     runs-on: ubuntu-latest
     environment: Production
     outputs:
@@ -33,6 +96,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          submodules: recursive
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -64,7 +128,7 @@ jobs:
           fi
 
           IFS=. read -r major minor patch <<< "$current_version"
-          case "${{ inputs.bump }}" in
+          case "${{ needs.resolve.outputs.bump }}" in
             major)
               major=$((major + 1))
               minor=0
@@ -78,7 +142,7 @@ jobs:
               patch=$((patch + 1))
               ;;
             *)
-              echo "Unsupported bump: ${{ inputs.bump }}" >&2
+              echo "Unsupported bump: ${{ needs.resolve.outputs.bump }}" >&2
               exit 1
               ;;
           esac
@@ -110,10 +174,12 @@ jobs:
           perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' crates/tinymemes-bus/Cargo.toml
           perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' crates/tinymemes-client/Cargo.toml
           cargo update --workspace --offline
-          # The proof workspace depends on the bumped crates by path; keep its
-          # lock in step so `--locked` runs after the release still resolve.
+          # The proof workspaces depend on the bumped contract by path; keep
+          # their locks in step so `--locked` runs after release still resolve.
           cargo update --manifest-path proof-workspaces/remix-markers/Cargo.toml \
-            -p tinymemes-bus -p tinymemes-client || true
+            -p tinymemes-bus -p tinymemes-client
+          cargo update --manifest-path proof-workspaces/bus-contract/Cargo.toml \
+            -p tinymemes-bus --offline
 
       - name: Commit version bump and tag
         env:
@@ -124,7 +190,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Cargo.toml Cargo.lock crates/tinymemes-module/Cargo.toml \
             crates/tinymemes-bus/Cargo.toml crates/tinymemes-client/Cargo.toml \
-            proof-workspaces/remix-markers/Cargo.lock
+            proof-workspaces/remix-markers/Cargo.lock proof-workspaces/bus-contract/Cargo.lock
           git commit -m "Release ${RELEASE_TAG}"
           git tag -a "${RELEASE_TAG}" -m "Release ${RELEASE_TAG}"
 
@@ -181,6 +247,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.publish.outputs.tag }}
+          submodules: recursive
           persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
@@ -275,6 +342,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.publish.outputs.tag }}
+          submodules: recursive
           persist-credentials: false
 
       - name: Download workflow artifacts
