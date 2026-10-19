@@ -61,8 +61,9 @@ try {
     if ($IsWindows) {
         $gitCommands = @(Get-Command git.exe -CommandType Application -ErrorAction Stop)
         $git = $gitCommands[0]
-        $gitRoot = Split-Path -Parent (Split-Path -Parent $git.Source)
-        $bash = Join-Path $gitRoot 'bin/bash.exe'
+        . (Join-Path $PSScriptRoot 'resolve-git-bash.ps1')
+        Write-Host "Using Git executable: $($git.Source)"
+        $bash = Resolve-GitBashExecutable -GitExecutable $git.Source
         if (-not (Test-Path -LiteralPath $bash -PathType Leaf)) {
             throw 'Git for Windows Bash was not found beside git.exe'
         }

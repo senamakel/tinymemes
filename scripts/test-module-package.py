@@ -215,7 +215,7 @@ class PackageVerification(unittest.TestCase):
                 bash_dir = scratch / "bash-selection"
                 bash_dir.mkdir()
                 selected_bash = bash_dir / "bash"
-                shutil.copy2(source_bash, selected_bash)
+                shutil.copyfile(source_bash, selected_bash)
                 selected_bash.chmod(0o755)
                 environment["PATH"] = f"{bash_dir}{os.pathsep}{environment['PATH']}"
 
@@ -305,6 +305,44 @@ class PackageVerification(unittest.TestCase):
         self.assertIn('format!("*{}:(OI)(CI)F"', helper)
         self.assertIn("secure_windows_fixture_directory(&path)", source)
 
+    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell is only installed on Windows CI")
+    def test_git_bash_resolution_handles_cmd_and_mingw_bin_git_layouts(self):
+        (ROOT / "target").mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="git-bash-layouts-", dir=ROOT / "target") as temp:
+            scratch = Path(temp)
+            git_root = scratch / "Git"
+            bash = git_root / "bin" / "bash.exe"
+            cmd_git = git_root / "cmd" / "git.exe"
+            mingw_git = git_root / "mingw64" / "bin" / "git.exe"
+            for path in (bash, cmd_git, mingw_git):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+
+            resolver = ROOT / "scripts/resolve-git-bash.ps1"
+            probe = scratch / "probe-git-bash.ps1"
+            probe.write_text(
+                "$ErrorActionPreference = 'Stop'\n"
+                f". '{resolver.as_posix()}'\n"
+                f"Resolve-GitBashExecutable -GitExecutable '{cmd_git.as_posix()}'\n"
+                f"Resolve-GitBashExecutable -GitExecutable '{mingw_git.as_posix()}'\n",
+                newline="\n",
+            )
+            result = subprocess.run(
+                ["pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-File", str(probe)],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(
+                result.returncode,
+                0,
+                f"Git Bash path resolution failed\nstdout: {result.stdout!r}\nstderr: {result.stderr!r}",
+            )
+            resolved = result.stdout.splitlines()
+            self.assertEqual(len(resolved), 2, result.stdout)
+            self.assertTrue(all(Path(candidate).samefile(bash) for candidate in resolved), resolved)
+
     def test_module_e2e_stages_one_hashed_artifact_in_a_private_windows_directory(self):
         source = (ROOT / "scripts/test-module-e2e.sh").read_text()
         self.assertIn('module-e2e-private-XXXXXX', source)
@@ -319,7 +357,8 @@ class PackageVerification(unittest.TestCase):
         self.assertNotIn('chmod 700 "$root/target/debug', source)
 
         verifier = (ROOT / "scripts/verify-module.ps1").read_text()
-        self.assertIn("Join-Path $gitRoot 'bin/bash.exe'", verifier)
+        self.assertIn("Resolve-GitBashExecutable -GitExecutable $git.Source", verifier)
+        self.assertIn("resolve-git-bash.ps1", verifier)
         self.assertIn("Get-Command bash -CommandType Application", verifier)
         self.assertIn("& $bash 'scripts/test-module-e2e.sh'", verifier)
 
