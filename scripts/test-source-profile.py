@@ -172,13 +172,16 @@ class PublishedSdkProfile(unittest.TestCase):
             selected_bash.write_bytes(b"selected Git Bash fixture")
             path = os.pathsep.join((str(poison), str(git_cmd)))
 
-            self.assertEqual(shutil.which("bash", path=path), str(poisoned_bash))
-            self.assertEqual(
-                git_bash_executable(path=path, windows=True),
-                str(selected_bash),
-            )
+            bare_bash = shutil.which("bash", path=path)
+            self.assertIsNotNone(bare_bash)
+            # Windows PATHEXT lookup may return .EXE while the fixture is .exe.
+            self.assertTrue(Path(bare_bash).samefile(poisoned_bash))
+            self.assertFalse(Path(bare_bash).samefile(selected_bash))
+            selected = git_bash_executable(path=path, windows=True)
+            self.assertTrue(Path(selected).samefile(selected_bash))
+            self.assertFalse(Path(selected).samefile(poisoned_bash))
             command = bash_command("scripts/resolve-release-mode.sh", path=path, windows=True)
-            self.assertEqual(command[0], str(selected_bash))
+            self.assertTrue(Path(command[0]).samefile(selected_bash))
             self.assertEqual(command[1], "scripts/resolve-release-mode.sh")
 
     def test_git_executable_mode_survives_windows_filesystem_mode_bits(self):

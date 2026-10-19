@@ -10,6 +10,7 @@ import tarfile
 import tempfile
 import unittest
 import zipfile
+from unittest.mock import patch
 sys.dont_write_bytecode = True
 from test_support import bash_diagnostic, run_bash
 
@@ -17,6 +18,10 @@ from test_support import bash_diagnostic, run_bash
 ROOT = Path(__file__).resolve().parent.parent
 VERSION = "0.4.2"
 HOST = "ubuntu-24.04-x86_64"
+
+
+def write_shell_shim(path, contents):
+    path.write_text(contents, newline="\n")
 
 
 class PackageVerification(unittest.TestCase):
@@ -35,10 +40,10 @@ class PackageVerification(unittest.TestCase):
             "if args and args[0] == 'metadata': print(json.dumps({'target_directory': os.environ['SPY_TARGET']}))\n"
         )
         cargo = spy_bin / "cargo"
-        cargo.write_text("#!/bin/sh\nexec python3 \"$SPY_SCRIPT\" \"$@\"\n")
+        write_shell_shim(cargo, "#!/bin/sh\nexec python3 \"$SPY_SCRIPT\" \"$@\"\n")
         cargo.chmod(0o755)
         python = spy_bin / "python3"
-        python.write_text("#!/bin/sh\nexec \"$SPY_PYTHON\" \"$@\"\n")
+        write_shell_shim(python, "#!/bin/sh\nexec \"$SPY_PYTHON\" \"$@\"\n")
         python.chmod(0o755)
         log = scratch / "cargo-calls.jsonl"
         environment.update(
@@ -49,6 +54,25 @@ class PackageVerification(unittest.TestCase):
             PATH=f"{spy_bin}{os.pathsep}{environment['PATH']}",
         )
         return log
+
+    def test_generated_executable_shims_keep_lf_under_windows_text_translation(self):
+        def windows_write_text(path, data, encoding=None, errors=None, newline=None):
+            effective_newline = "\r\n" if newline is None else newline
+            with path.open("w", encoding=encoding, errors=errors, newline=effective_newline) as stream:
+                return stream.write(data)
+
+        (ROOT / "target").mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="module-shim-newlines-", dir=ROOT / "target") as temp:
+            scratch = Path(temp)
+            environment = dict(os.environ)
+            with patch.object(Path, "write_text", windows_write_text):
+                self.install_cargo_spy(scratch, environment)
+
+            for shim_name in ("cargo", "python3"):
+                with self.subTest(shim=shim_name):
+                    contents = (scratch / "bin" / shim_name).read_bytes()
+                    self.assertTrue(contents.startswith(b"#!/bin/sh\n"), contents)
+                    self.assertNotIn(b"\r", contents)
 
     def run_unix_verifier(self, archive, environment):
         archive_arg = Path(os.path.relpath(archive, ROOT)).as_posix()
@@ -263,13 +287,13 @@ class PackageVerification(unittest.TestCase):
             calls = scratch / "native-calls.jsonl"
 
             uname = spy_bin / "uname"
-            uname.write_text("#!/bin/sh\necho MINGW_NT-10.0-1\n")
+            write_shell_shim(uname, "#!/bin/sh\necho MINGW_NT-10.0-1\n")
             uname.chmod(0o755)
             cygpath = spy_bin / "cygpath"
-            cygpath.write_text("#!/bin/sh\nshift\nprintf '%s\\n' \"$1\"\n")
+            write_shell_shim(cygpath, "#!/bin/sh\nshift\nprintf '%s\\n' \"$1\"\n")
             cygpath.chmod(0o755)
             powershell = spy_bin / "powershell.exe"
-            powershell.write_text("#!/bin/sh\necho S-1-5-21-12345\n")
+            write_shell_shim(powershell, "#!/bin/sh\necho S-1-5-21-12345\n")
             powershell.chmod(0o755)
 
             native_spy = scratch / "native-spy.py"
@@ -283,7 +307,7 @@ class PackageVerification(unittest.TestCase):
             )
             for name in ("icacls", "cargo"):
                 shim = spy_bin / name
-                shim.write_text(f"#!{sys.executable}\nexec(open({str(native_spy)!r}).read())\n")
+                write_shell_shim(shim, f"#!{sys.executable}\nexec(open({str(native_spy)!r}).read())\n")
                 shim.chmod(0o755)
 
             environment = dict(os.environ)
@@ -335,7 +359,8 @@ class PackageVerification(unittest.TestCase):
             real_cp = shutil.which("cp")
             self.assertIsNotNone(real_cp)
             corrupting_cp = spy_bin / "cp"
-            corrupting_cp.write_text(
+            write_shell_shim(
+                corrupting_cp,
                 f"#!{sys.executable}\n"
                 "import os, pathlib, subprocess, sys\n"
                 "subprocess.run([os.environ['REAL_CP'], *sys.argv[1:]], check=True)\n"
@@ -344,7 +369,7 @@ class PackageVerification(unittest.TestCase):
             corrupting_cp.chmod(0o755)
             cargo_log = scratch / "cargo-was-called"
             cargo = spy_bin / "cargo"
-            cargo.write_text("#!/bin/sh\necho called >> \"$CARGO_SPY_LOG\"\n")
+            write_shell_shim(cargo, "#!/bin/sh\necho called >> \"$CARGO_SPY_LOG\"\n")
             cargo.chmod(0o755)
 
             environment = dict(os.environ)
