@@ -59,7 +59,8 @@ try {
     }
     $env:TINYMEMES_MODULE = $library
     if ($IsWindows) {
-        $git = Get-Command git.exe -CommandType Application -ErrorAction Stop
+        $gitCommands = @(Get-Command git.exe -CommandType Application -ErrorAction Stop)
+        $git = $gitCommands[0]
         $gitRoot = Split-Path -Parent (Split-Path -Parent $git.Source)
         $bash = Join-Path $gitRoot 'bin/bash.exe'
         if (-not (Test-Path -LiteralPath $bash -PathType Leaf)) {
@@ -67,11 +68,14 @@ try {
         }
     }
     else {
-        $bashCommand = Get-Command bash -CommandType Application -ErrorAction Stop
+        $bashCommands = @(Get-Command bash -CommandType Application -ErrorAction Stop)
+        $bashCommand = $bashCommands[0]
         $bash = $bashCommand.Source
     }
-    $bashVersion = (& $bash --version 2>&1 | Select-Object -First 1)
-    if ($LASTEXITCODE -ne 0) { throw "Bash version probe failed: $bash" }
+    $bashVersionOutput = @(& $bash --version 2>&1)
+    $bashVersionExitCode = $LASTEXITCODE
+    if ($bashVersionExitCode -ne 0) { throw "Bash version probe failed: $bash" }
+    $bashVersion = $bashVersionOutput | Select-Object -First 1
     Write-Host "Using Bash executable: $bash ($bashVersion)"
     & $bash 'scripts/test-module-e2e.sh'
     if ($LASTEXITCODE -ne 0) { throw 'extracted module failed the TinyBus loader and contract checks' }

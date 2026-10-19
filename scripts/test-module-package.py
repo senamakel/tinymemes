@@ -207,6 +207,49 @@ class PackageVerification(unittest.TestCase):
                 MODULE_HOST="windows-2025-x86_64",
             )
             log = self.install_cargo_spy(scratch, environment)
+            selected_bash = None
+            selected_bash_version = None
+            if os.name == "posix":
+                source_bash = shutil.which("bash")
+                self.assertIsNotNone(source_bash)
+                bash_dir = scratch / "bash-selection"
+                bash_dir.mkdir()
+                selected_bash = bash_dir / "bash"
+                shutil.copy2(source_bash, selected_bash)
+                selected_bash.chmod(0o755)
+                environment["PATH"] = f"{bash_dir}{os.pathsep}{environment['PATH']}"
+
+                matches = subprocess.run(
+                    [
+                        "pwsh",
+                        "-NoLogo",
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-Command",
+                        "$commands = @(Get-Command bash -CommandType Application); $commands | ForEach-Object Source",
+                    ],
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(
+                    matches.returncode,
+                    0,
+                    f"Bash Application lookup failed\nstdout: {matches.stdout!r}\nstderr: {matches.stderr!r}",
+                )
+                match_paths = matches.stdout.splitlines()
+                self.assertGreaterEqual(len(match_paths), 2, matches.stdout)
+                self.assertTrue(Path(match_paths[0]).samefile(selected_bash), matches.stdout)
+                version = subprocess.run(
+                    [str(selected_bash), "--version"],
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(version.returncode, 0, version.stderr)
+                selected_bash_version = version.stdout.splitlines()[0]
+
             verified = subprocess.run(
                 [
                     "pwsh",
@@ -228,6 +271,11 @@ class PackageVerification(unittest.TestCase):
                 0,
                 f"PowerShell verifier failed\nstdout: {verified.stdout!r}\nstderr: {verified.stderr!r}",
             )
+            if selected_bash is not None:
+                self.assertIn(
+                    f"Using Bash executable: {selected_bash} ({selected_bash_version})",
+                    verified.stdout,
+                )
             calls = [json.loads(line) for line in log.read_text().splitlines()]
             loader_calls = [
                 call for call in calls
