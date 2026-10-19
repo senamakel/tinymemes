@@ -236,7 +236,7 @@ class PackageVerification(unittest.TestCase):
     def test_module_e2e_stages_one_hashed_artifact_in_a_private_windows_directory(self):
         source = (ROOT / "scripts/test-module-e2e.sh").read_text()
         self.assertIn('module-e2e-private-XXXXXX', source)
-        self.assertIn('icacls "$stage_windows" /inheritance:r /grant:r', source)
+        self.assertIn("MSYS2_ARG_CONV_EXCL='*' icacls", source)
         self.assertIn('source_hash="$(file_hash "$source_path")"', source)
         self.assertIn('staged_hash="$(file_hash "$staged_module")"', source)
         self.assertIn('[[ "$source_hash" == "$staged_hash" ]]', source)
@@ -250,6 +250,77 @@ class PackageVerification(unittest.TestCase):
         self.assertIn("Join-Path $gitRoot 'bin/bash.exe'", verifier)
         self.assertIn("Get-Command bash -CommandType Application", verifier)
         self.assertIn("& $bash 'scripts/test-module-e2e.sh'", verifier)
+
+    @unittest.skipUnless(os.name == "posix", "Native-command boundary spies use POSIX executable shims")
+    def test_windows_icacls_receives_native_args_with_command_scoped_exclusion(self):
+        (ROOT / "target").mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="module-acl-boundary-", dir=ROOT / "target") as temp:
+            scratch = Path(temp)
+            spy_bin = scratch / "bin"
+            spy_bin.mkdir()
+            source = scratch / "tinymemes_module.dll"
+            source.write_bytes(b"Windows ACL boundary fixture")
+            calls = scratch / "native-calls.jsonl"
+
+            uname = spy_bin / "uname"
+            uname.write_text("#!/bin/sh\necho MINGW_NT-10.0-1\n")
+            uname.chmod(0o755)
+            cygpath = spy_bin / "cygpath"
+            cygpath.write_text("#!/bin/sh\nshift\nprintf '%s\\n' \"$1\"\n")
+            cygpath.chmod(0o755)
+            powershell = spy_bin / "powershell.exe"
+            powershell.write_text("#!/bin/sh\necho S-1-5-21-12345\n")
+            powershell.chmod(0o755)
+
+            native_spy = scratch / "native-spy.py"
+            native_spy.write_text(
+                "import json, os, pathlib, sys\n"
+                "record = {'command': pathlib.Path(sys.argv[0]).name, 'args': sys.argv[1:], "
+                "'MSYS2_ARG_CONV_EXCL': os.environ.get('MSYS2_ARG_CONV_EXCL'), "
+                "'TINYMEMES_MODULE': os.environ.get('TINYMEMES_MODULE')}\n"
+                "with open(os.environ['NATIVE_CALLS'], 'a') as calls: "
+                "calls.write(json.dumps(record) + '\\n')\n"
+            )
+            for name in ("icacls", "cargo"):
+                shim = spy_bin / name
+                shim.write_text(f"#!{sys.executable}\nexec(open({str(native_spy)!r}).read())\n")
+                shim.chmod(0o755)
+
+            environment = dict(os.environ)
+            environment.update(
+                TINYMEMES_MODULE=str(source),
+                NATIVE_CALLS=str(calls),
+                MSYS2_ARG_CONV_EXCL="caller-sentinel",
+                PATH=f"{spy_bin}{os.pathsep}{environment['PATH']}",
+            )
+            result = run_bash(
+                "scripts/test-module-e2e.sh",
+                cwd=ROOT,
+                env=environment,
+            )
+            self.assertEqual(result.returncode, 0, bash_diagnostic(result))
+            records = [json.loads(line) for line in calls.read_text().splitlines()]
+            acl_calls = [record for record in records if record["command"] == "icacls"]
+            cargo_calls = [record for record in records if record["command"] == "cargo"]
+            self.assertEqual(len(acl_calls), 1, records)
+            acl = acl_calls[0]
+            self.assertRegex(acl["args"][0], r"module-e2e-private-[^/\\]+$")
+            self.assertEqual(
+                acl["args"][1:],
+                ["/inheritance:r", "/grant:r", "*S-1-5-21-12345:(OI)(CI)F"],
+                records,
+            )
+            self.assertEqual(acl["MSYS2_ARG_CONV_EXCL"], "*", records)
+            self.assertEqual(len(cargo_calls), 3, records)
+            self.assertTrue(
+                all(record["MSYS2_ARG_CONV_EXCL"] == "caller-sentinel" for record in cargo_calls),
+                records,
+            )
+            self.assertEqual(
+                {record["TINYMEMES_MODULE"] for record in cargo_calls},
+                {str(Path(acl["args"][0]) / "tinymemes_module.dll")},
+                records,
+            )
 
     @unittest.skipUnless(os.name == "posix", "The corrupting cp fixture uses a POSIX script shim")
     def test_module_e2e_rejects_staged_hash_mismatch_before_native_consumers(self):

@@ -39,7 +39,7 @@ case "$(uname -s)" in
       echo "PowerShell returned an invalid current-user SID" >&2
       exit 2
     }
-    if ! icacls "$stage_windows" /inheritance:r /grant:r "*${sid}:(OI)(CI)F" >/dev/null; then
+    if ! MSYS2_ARG_CONV_EXCL='*' icacls "$stage_windows" /inheritance:r /grant:r "*${sid}:(OI)(CI)F" >/dev/null; then
       echo "could not make the module fixture directory private on Windows" >&2
       exit 2
     fi
