@@ -286,6 +286,56 @@ class PublishedSdkProfile(unittest.TestCase):
         self.assertIn("needs.resolve.outputs.mode == 'main'", release)
         self.assertIn("run: scripts/resolve-release-mode.sh", release)
 
+    def test_reviewed_release_caller_matches_pinned_reusable_input_types(self):
+        actionlint = shutil.which("actionlint")
+        if actionlint is None:
+            self.skipTest("actionlint is required to validate reusable workflow input types")
+
+        release = (ROOT / ".github/workflows/release.yml").read_text()
+        release_pin = f"module-reviewed-epic-release.yml@{RELEASE_PIN}"
+        remote_uses = f"tinyhumansai/.github/.github/workflows/{release_pin}"
+        local_uses = "./.github/workflows/reusable.yml"
+        self.assertIn(remote_uses, release)
+
+        # actionlint can check typed inputs only when the reusable workflow is local.
+        # This is the reviewed-pr interface declared by the pinned shared workflow.
+        reusable = """name: Reviewed module epic release
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+      version:
+        type: string
+        required: true
+      reviewed-pr:
+        type: number
+        required: true
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo \"${{ inputs.reviewed-pr }}\"
+"""
+        (ROOT / "target").mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="release-input-type-", dir=ROOT / "target") as scratch:
+            project = Path(scratch)
+            workflows = project / ".github/workflows"
+            workflows.mkdir(parents=True)
+            (workflows / "release.yml").write_text(release.replace(remote_uses, local_uses))
+            (workflows / "reusable.yml").write_text(reusable)
+            subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+            result = subprocess.run(
+                [actionlint, ".github/workflows/release.yml"],
+                cwd=project,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_shared_release_packagers_and_distro_runner_are_present(self):
         for relative_path in (
             "scripts/build-module.sh",

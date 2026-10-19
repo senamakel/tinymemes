@@ -12,6 +12,34 @@ permissions:
   contents: read
 
 jobs:
+  reviewed-release-caller-contract:
+    name: Reviewed release caller input types
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Check out pinned actionlint source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: rhysd/actionlint
+          ref: 914e7df21a07ef503a81201c76d2b11c789d3fca
+          path: target/workflow-tools/actionlint
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Build actionlint
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/target/workflow-tools/bin"
+          go build -o "$GITHUB_WORKSPACE/target/workflow-tools/bin/actionlint" ./cmd/actionlint
+          echo "$GITHUB_WORKSPACE/target/workflow-tools/bin" >> "$GITHUB_PATH"
+        working-directory: target/workflow-tools/actionlint
+      - name: Require actionlint and check reviewed release caller types
+        run: |
+          actionlint -version
+          python3 scripts/test-source-profile.py PublishedSdkProfile.test_reviewed_release_caller_matches_pinned_reusable_input_types
+
   module-ci:
     uses: tinyhumansai/.github/.github/workflows/module-ci.yml@4adc1080fb495098e7af1aade82ed7e6e3c69bb7
     with:
