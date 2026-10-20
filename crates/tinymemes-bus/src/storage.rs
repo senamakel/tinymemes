@@ -57,7 +57,7 @@ pub fn collections() -> Vec<CollectionSpec> {
 }
 
 /// The document id of `kind` (unchanged from v1; a plain word is its own
-/// [`Key`]).
+/// [`tinystoragedrivers_types::Key`]).
 #[must_use]
 pub fn state_id(kind: IndexKind) -> &'static str {
     match kind {
