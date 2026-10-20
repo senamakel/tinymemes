@@ -23,26 +23,33 @@ use tinystoragedrivers_testkit::{Failing, FaultPlan, MemoryBackend};
 use tinystoragedrivers_types::{ErrorKind, Precondition, Scope, WriteOptions};
 
 fn artifact() -> PathBuf {
-    if let Some(path) = std::env::var_os("TINYMEMES_MODULE") {
-        return PathBuf::from(path);
-    }
-    let exe = std::env::current_exe().unwrap();
-    let profile_dir = exe.parent().and_then(Path::parent).unwrap().to_owned();
-    let name = format!(
-        "{}tinymemes_module{}",
-        std::env::consts::DLL_PREFIX,
-        std::env::consts::DLL_SUFFIX
-    );
-    let path = profile_dir.join(&name);
-    if !path.exists() {
-        let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-        let mut build = std::process::Command::new(cargo);
-        build.args(["build", "--package", "tinymemes-module"]);
-        if profile_dir.ends_with("release") {
-            build.arg("--release");
+    let path = if let Some(path) = std::env::var_os("TINYMEMES_MODULE") {
+        PathBuf::from(path)
+    } else {
+        let exe = std::env::current_exe().unwrap();
+        let profile_dir = exe.parent().and_then(Path::parent).unwrap().to_owned();
+        let name = format!(
+            "{}tinymemes_module{}",
+            std::env::consts::DLL_PREFIX,
+            std::env::consts::DLL_SUFFIX
+        );
+        let path = profile_dir.join(&name);
+        if !path.exists() {
+            let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+            let mut build = std::process::Command::new(cargo);
+            build.args(["build", "--package", "tinymemes-module"]);
+            if profile_dir.ends_with("release") {
+                build.arg("--release");
+            }
+            assert!(build.status().unwrap().success(), "build the module");
         }
-        assert!(build.status().unwrap().success(), "build the module");
-    }
+        path
+    };
+    assert!(
+        path.is_file(),
+        "compiled module artifact is missing: {}",
+        path.display()
+    );
     path
 }
 
@@ -372,7 +379,18 @@ async fn module_startup_refuses_when_the_host_has_not_bound_storage() {
         .for_scope(&Scope::new("tenant:unbound-storage").unwrap())
         .unwrap();
 
-    assert!(load_with_storage_mode(storage, false).await.is_err());
+    let error = match load_with_storage_mode(storage, false).await {
+        Ok(_) => panic!("module must refuse startup when storage is not served"),
+        Err(error) => error,
+    };
+    // TinyBus intentionally hides setup callback details from the loader, so
+    // pin the specific module-initialization refusal. The fixture above omits
+    // the storage endpoint; `artifact()` separately proves the cdylib exists.
+    assert!(
+        matches!(error, tinybus::Error::ModuleRefused { ref reason, .. }
+            if reason == "module initialization failed"),
+        "unexpected startup failure: {error}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -411,7 +429,18 @@ async fn marker_migration_conflict_refuses_module_start_and_preserves_both_recor
         .await
         .unwrap();
 
-    assert!(load_with_storage_mode(storage.clone(), true).await.is_err());
+    let error = match load_with_storage_mode(storage.clone(), true).await {
+        Ok(_) => panic!("conflicting marker migration must refuse startup"),
+        Err(error) => error,
+    };
+    // The loader redacts the callback's conflict text to the same setup
+    // refusal. The conflicting records are asserted unchanged below, which
+    // proves this fixture reached migration and refused for the right cause.
+    assert!(
+        matches!(error, tinybus::Error::ModuleRefused { ref reason, .. }
+            if reason == "module initialization failed"),
+        "unexpected startup failure: {error}"
+    );
     assert_eq!(
         storage
             .documents()
@@ -951,13 +980,22 @@ async fn concurrent_compiled_marks_keep_both_ids() {
 /// A scratch directory next to the artifact, removed on drop.
 mod tempfile_dir {
     use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+
     pub struct Dir(PathBuf);
     impl Dir {
         pub fn new_in(parent: &Path) -> Self {
-            let path = parent.join(format!("compiled-remix-{}-{}", std::process::id(), line!()));
-            let _ = std::fs::remove_dir_all(&path);
-            std::fs::create_dir_all(&path).unwrap();
-            Self(path)
+            loop {
+                let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+                let path = parent.join(format!("compiled-remix-{}-{id}", std::process::id()));
+                match std::fs::create_dir(&path) {
+                    Ok(()) => return Self(path),
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                    Err(error) => panic!("create compiled-module fixture directory: {error}"),
+                }
+            }
         }
         pub fn path(&self) -> &Path {
             &self.0
@@ -968,6 +1006,34 @@ mod tempfile_dir {
             let _ = std::fs::remove_dir_all(&self.0);
         }
     }
+}
+
+#[test]
+fn concurrent_module_fixtures_get_distinct_directories() {
+    let root = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join(format!("compiled-remix-dir-test-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let dirs = std::thread::scope(|scope| {
+        (0..8)
+            .map(|_| scope.spawn(|| tempfile_dir::Dir::new_in(&root)))
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|thread| thread.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    let mut paths = dirs
+        .iter()
+        .map(|dir| dir.path().to_owned())
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths.dedup();
+    assert_eq!(paths.len(), dirs.len());
+    assert!(paths.iter().all(|path| path.is_dir()));
+    drop(dirs);
+    std::fs::remove_dir(root).unwrap();
 }
 
 fn request(correlation: &str) -> RemixRequest {

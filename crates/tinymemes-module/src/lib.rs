@@ -1,4 +1,7 @@
-//! Stateless content module. Configuration cannot admit a backend or profile.
+//! Content operations and persistent remix markers over the host's storage.
+//!
+//! The module owns its collection setup and migration when it starts; hosts
+//! provide the scoped storage ports but do not compose module migrations.
 use tinymemes_bus::{STATE_INTERFACE, STATE_PATH};
 
 /// Bus name the module claims.
@@ -37,7 +40,7 @@ impl tinybus::service::Interface for ContentService {
             .map_err(|_| tinybus::Error::failed("invalid content response"))
     }
 }
-/// Register the stateless operation at its declared path and bus name.
+/// Bind host storage, prepare this owner's collections, then serve operations.
 async fn setup(connection: tinybus::Connection) -> tinybus::Result<()> {
     let storage = tinystoragedrivers_busproxy::connect_storage(connection.clone())
         .await

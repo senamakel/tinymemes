@@ -1399,6 +1399,10 @@ version = "0.4.1"
 dependencies = [
  "tinybus 0.1.5 (git+https://github.com/tinyhumansai/tinybus?rev=d5b949be8ea56eb5a17289a09aa28e8c09bd88b7)",
  "tinymemes-bus",
+ "tinystoragedrivers-api",
+ "tinystoragedrivers-busproxy",
+ "tinystoragedrivers-testkit",
+ "tinystoragedrivers-types",
  "tokio",
 ]
 
