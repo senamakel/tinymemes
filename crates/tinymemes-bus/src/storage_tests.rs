@@ -2,7 +2,7 @@ use super::*;
 use serde_json::json;
 
 #[test]
-fn collections_declare_only_memes_owned_storage_and_shared_runner_records() {
+fn collections_declare_memes_state_and_marker_storage_with_shared_runner_records() {
     let names: Vec<_> = collections()
         .into_iter()
         .map(|collection| collection.name)
@@ -12,6 +12,7 @@ fn collections_declare_only_memes_owned_storage_and_shared_runner_records() {
         [
             STATE_COLLECTION,
             MARKERS_COLLECTION,
+            LEGACY_MARKERS_COLLECTION,
             LEGACY_STATE_COLLECTION,
             MIGRATIONS_COLLECTION,
             LEASES_COLLECTION,
