@@ -9,6 +9,7 @@ mod engine;
 mod host;
 mod persistent;
 mod remix;
+mod storage;
 
 struct ContentService;
 #[async_trait::async_trait]
@@ -38,6 +39,12 @@ impl tinybus::service::Interface for ContentService {
 }
 /// Register the stateless operation at its declared path and bus name.
 async fn setup(connection: tinybus::Connection) -> tinybus::Result<()> {
+    let storage = tinystoragedrivers_busproxy::connect_storage(connection.clone())
+        .await
+        .map_err(|error| tinybus::Error::failed(format!("connect storage: {error}")))?;
+    storage::prepare(&storage)
+        .await
+        .map_err(|error| tinybus::Error::failed(format!("prepare memes storage: {error}")))?;
     connection
         .serve_at(STATE_PATH.try_into()?, ContentService)
         .await?;
@@ -45,7 +52,7 @@ async fn setup(connection: tinybus::Connection) -> tinybus::Result<()> {
         .serve_at(
             tinymemes_bus::MARKER_PATH.try_into()?,
             persistent::PersistentService {
-                connection: connection.clone(),
+                documents: std::sync::Arc::clone(storage.documents()),
             },
         )
         .await?;
@@ -93,3 +100,7 @@ pub use exports::linked_module;
 #[cfg(test)]
 #[path = "lib_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "test_support.rs"]
+mod test_support;

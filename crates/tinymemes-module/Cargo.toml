@@ -17,7 +17,9 @@ static-link = []
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.0.0" }
+tinystoragedrivers-api = { git = "https://github.com/senamakel/tinystoragedrivers", tag = "v2.0.1" }
+tinystoragedrivers-busproxy = { git = "https://github.com/senamakel/tinystoragedrivers", tag = "v2.0.1" }
+tinystoragedrivers-types = { git = "https://github.com/senamakel/tinystoragedrivers", tag = "v2.0.1" }
 tinymemes = { path = "../.." }
 tinymemes-bus = { path = "../tinymemes-bus" }
 serde = { version = "1", features = ["derive"] }
@@ -30,7 +32,8 @@ tinybus = { git = "https://github.com/tinyhumansai/tinybus", rev = "d5b949be8ea5
 tinybus-module = { git = "https://github.com/tinyhumansai/tinybus", rev = "d5b949be8ea56eb5a17289a09aa28e8c09bd88b7" }
 
 [dev-dependencies]
-tinymemes-client = { path = "../tinymemes-client" }
+tinymemes-client = { path = "../tinymemes-client", features = ["host-callback"] }
+tinystoragedrivers-testkit = { git = "https://github.com/senamakel/tinystoragedrivers", tag = "v2.0.1" }
 sha2 = "0.10"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tinybus = { git = "https://github.com/tinyhumansai/tinybus", rev = "d5b949be8ea56eb5a17289a09aa28e8c09bd88b7", default-features = false, features = ["modules"] }
