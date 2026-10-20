@@ -11,6 +11,7 @@ tinymemes-client = { path = "../../../crates/tinymemes-client", features = ["hos
 tinybus = { git = "https://github.com/tinyhumansai/tinybus", rev = "d5b949be8ea56eb5a17289a09aa28e8c09bd88b7", default-features = false, features = ["modules"] }
 tinystoragedrivers-api = { git = "https://github.com/senamakel/tinystoragedrivers", tag = "v2.0.1" }
 tinystoragedrivers-busproxy = { git = "https://github.com/senamakel/tinystoragedrivers", tag = "v2.0.1" }
+tinystoragedrivers-types = { git = "https://github.com/senamakel/tinystoragedrivers", tag = "v2.0.1" }
 tinystoragedrivers-testkit = { git = "https://github.com/senamakel/tinystoragedrivers", tag = "v2.0.1" }
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }

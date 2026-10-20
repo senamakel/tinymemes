@@ -825,6 +825,7 @@ dependencies = [
  "tinystoragedrivers-api",
  "tinystoragedrivers-busproxy",
  "tinystoragedrivers-testkit",
+ "tinystoragedrivers-types",
  "tokio",
 ]
 
