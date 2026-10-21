@@ -404,18 +404,13 @@ class PublishedSdkProfile(unittest.TestCase):
                         shutil.copy2(ROOT / relative_path, destination)
                         before[relative_path] = tomllib.loads(destination.read_text())
 
-                    subprocess.run(
-                        [
-                            "bash",
-                            str(ROOT / "scripts/update-release-versions.sh"),
-                            str(scratch_root),
-                            next_version,
-                        ],
-                        cwd=scratch_root,
-                        check=True,
-                        capture_output=True,
-                        text=True,
+                    result = run_bash(
+                        "scripts/update-release-versions.sh",
+                        scratch_root.relative_to(ROOT).as_posix(),
+                        next_version,
+                        cwd=ROOT,
                     )
+                    self.assertEqual(result.returncode, 0, bash_diagnostic(result))
 
                     for relative_path, expected_updates in copied_manifests.items():
                         after = tomllib.loads((scratch_root / relative_path).read_text())
