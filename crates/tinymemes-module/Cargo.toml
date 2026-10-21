@@ -17,7 +17,7 @@ static-link = []
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.6.0", default-features = false, features = ["client"] }
+tinystoragedrivers-bus = { version = "1.9.0", git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "a04e3a174fa8f28d5229a816ca6b39c72a9efd7b", default-features = false, features = ["client"] }
 tinymemes = { path = "../.." }
 tinymemes-bus = { path = "../tinymemes-bus" }
 serde = { version = "1", features = ["derive"] }
@@ -26,18 +26,18 @@ async-trait = "0.1"
 tracing = "0.1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 tokio = { version = "1", features = ["sync", "time", "rt"] }
-tinybus = { version = ">=0.3.3, <0.4.0", git = "https://github.com/tinyhumansai/tinybus", rev = "207a9a7df15e44fdba00a807d0f7eaf21904ba0e", default-features = false }
-tinybus-module = { version = ">=0.3.3, <0.4.0", git = "https://github.com/tinyhumansai/tinybus", rev = "207a9a7df15e44fdba00a807d0f7eaf21904ba0e" }
+tinybus = { version = "=0.3.11", git = "https://github.com/tinyhumansai/tinybus", rev = "9e14f65666b11782ec1054aba576114026d180f8", default-features = false }
+tinybus-module = { version = "=0.3.11", git = "https://github.com/tinyhumansai/tinybus", rev = "9e14f65666b11782ec1054aba576114026d180f8" }
 
 [dev-dependencies]
 tinymemes-client = { path = "../tinymemes-client", features = ["host-callback"] }
 sha2 = "0.10"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-tinybus = { version = ">=0.3.3, <0.4.0", git = "https://github.com/tinyhumansai/tinybus", rev = "207a9a7df15e44fdba00a807d0f7eaf21904ba0e", default-features = false, features = ["modules"] }
-tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.6.0" }
-tinystoragedrivers-core = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.6.0" }
-tinystoragedrivers-tinybus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.6.0" }
-tinystoragedrivers-sqlite = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.6.0" }
+tinybus = { version = "=0.3.11", git = "https://github.com/tinyhumansai/tinybus", rev = "9e14f65666b11782ec1054aba576114026d180f8", default-features = false, features = ["modules"] }
+tinystoragedrivers-bus = { version = "1.9.0", git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "a04e3a174fa8f28d5229a816ca6b39c72a9efd7b" }
+tinystoragedrivers-core = { version = "1.9.0", git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "a04e3a174fa8f28d5229a816ca6b39c72a9efd7b" }
+tinystoragedrivers-tinybus = { version = "1.9.0", git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "a04e3a174fa8f28d5229a816ca6b39c72a9efd7b" }
+tinystoragedrivers-sqlite = { version = "1.9.0", git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "a04e3a174fa8f28d5229a816ca6b39c72a9efd7b" }
 tempfile = "3"
 
 [lints.rust]

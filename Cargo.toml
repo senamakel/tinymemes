@@ -1,7 +1,17 @@
 [workspace]
-exclude = ["proof-workspaces/bus-contract", "proof-workspaces/remix-markers"]
+exclude = [
+    "proof-workspaces/bus-contract",
+    "proof-workspaces/remix-markers",
+    "vendor/tinybus",
+]
 members = [".", "crates/tinymemes-bus", "crates/tinymemes-client", "crates/tinymemes-module"]
 resolver = "2"
+
+# TinyStorageDrivers 1.9 pins TinyBus 0.3.10; use the exact verified 0.3.11
+# source from the fork so both dependency edges share one Cargo package ID.
+[patch."https://github.com/tinyhumansai/tinybus"]
+tinybus = { version = "=0.3.11", git = "https://github.com/senamakel/tinybus", rev = "9e14f65666b11782ec1054aba576114026d180f8" }
+tinybus-module = { version = "=0.3.11", git = "https://github.com/senamakel/tinybus", rev = "9e14f65666b11782ec1054aba576114026d180f8" }
 
 [package]
 name = "tinymemes"

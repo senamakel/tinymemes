@@ -12,12 +12,12 @@ default = []
 host-callback = ["tinybus/modules"]
 
 [dependencies]
-tinymemes-bus = { path = "../tinymemes-bus" }
-tinybus = { version = ">=0.3.3, <0.4.0", git = "https://github.com/tinyhumansai/tinybus", rev = "207a9a7df15e44fdba00a807d0f7eaf21904ba0e", default-features = false }
+tinymemes-bus = { version = "0.4.2", path = "../tinymemes-bus" }
+tinybus = { version = "=0.3.11", git = "https://github.com/tinyhumansai/tinybus", rev = "9e14f65666b11782ec1054aba576114026d180f8", default-features = false }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-tinybus = { version = ">=0.3.3, <0.4.0", git = "https://github.com/tinyhumansai/tinybus", rev = "207a9a7df15e44fdba00a807d0f7eaf21904ba0e", default-features = false, features = ["modules"] }
+tinybus = { version = "=0.3.11", git = "https://github.com/tinyhumansai/tinybus", rev = "9e14f65666b11782ec1054aba576114026d180f8", default-features = false, features = ["modules"] }
 
 [lints.rust]
 missing_docs = "warn"

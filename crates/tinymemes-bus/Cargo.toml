@@ -16,10 +16,10 @@ storage = ["dep:tinystoragedrivers-core"]
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tinystoragedrivers-core = { version = "1.6.0", git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.6.0", default-features = false, optional = true }
+tinystoragedrivers-core = { version = "1.9.0", git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "a04e3a174fa8f28d5229a816ca6b39c72a9efd7b", default-features = false, optional = true }
 
 [dev-dependencies]
-tinystoragedrivers-core = { version = "1.6.0", git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.6.0", default-features = false }
+tinystoragedrivers-core = { version = "1.9.0", git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "a04e3a174fa8f28d5229a816ca6b39c72a9efd7b", default-features = false }
 tokio = { version = "1", features = ["macros", "rt"] }
 
 [lints.rust]
