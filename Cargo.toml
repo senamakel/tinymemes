@@ -15,7 +15,7 @@ tinybus-module = { version = "=0.3.11", git = "https://github.com/senamakel/tiny
 
 [package]
 name = "tinymemes"
-version = "0.4.3"
+version = "0.4.4"
 edition = "2024"
 rust-version = "1.88"
 license = "GPL-3.0-only"
@@ -30,7 +30,7 @@ keywords = ["memes", "llm", "openhuman", "jev", "chat"]
 categories = ["text-processing"]
 
 [dependencies]
-tinymemes-bus = { version = "0.4.3", path = "crates/tinymemes-bus" }
+tinymemes-bus = { version = "0.4.4", path = "crates/tinymemes-bus" }
 async-trait = "0.1"
 futures = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
