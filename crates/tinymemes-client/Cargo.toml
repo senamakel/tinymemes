@@ -1,6 +1,6 @@
 [package]
 name = "tinymemes-client"
-version = "0.4.2"
+version = "0.4.3"
 edition = "2024"
 rust-version = "1.88"
 license = "GPL-3.0-only"
@@ -12,7 +12,7 @@ default = []
 host-callback = ["tinybus/modules"]
 
 [dependencies]
-tinymemes-bus = { version = "0.4.2", path = "../tinymemes-bus" }
+tinymemes-bus = { version = "0.4.3", path = "../tinymemes-bus" }
 tinybus = { version = "=0.3.11", git = "https://github.com/tinyhumansai/tinybus", rev = "9e14f65666b11782ec1054aba576114026d180f8", default-features = false }
 
 [dev-dependencies]

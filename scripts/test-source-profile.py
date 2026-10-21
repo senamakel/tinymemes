@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import textwrap
 import tomllib
 import unittest
 import re
@@ -23,6 +24,9 @@ RELEASE_PIN = "6ed83b04aab2d8977ec62e966cb914531e534fa4"
 
 def manifest(relative_path):
     return tomllib.loads((ROOT / relative_path).read_text())
+
+
+CURRENT_VERSION = manifest("Cargo.toml")["package"]["version"]
 
 
 def git_tree_executable(relative_path):
@@ -67,17 +71,25 @@ class PublishedSdkProfile(unittest.TestCase):
         return result, values
 
     def test_release_router_finite_main_and_reviewed_input_matrix(self):
+        major, minor, patch = map(int, CURRENT_VERSION.split("."))
+        current_tag = f"v{CURRENT_VERSION}"
+        next_patch_tag = f"v{major}.{minor}.{patch + 1}"
         valid = (
             ({"BUMP": "patch"}, {"mode": "main", "bump": "patch"}),
             (
                 {
                     "RELEASE_MODE": "reviewed-epic",
-                    "TAG": "v0.4.2",
-                    "VERSION": "0.4.2",
+                    "TAG": current_tag,
+                    "VERSION": CURRENT_VERSION,
                     "REVIEWED_PR": "16",
                     "GITHUB_REF": "refs/heads/epic/8056-modules-wiring",
                 },
-                {"mode": "reviewed-epic", "tag": "v0.4.2", "version": "0.4.2", "reviewed_pr": "16"},
+                {
+                    "mode": "reviewed-epic",
+                    "tag": current_tag,
+                    "version": CURRENT_VERSION,
+                    "reviewed_pr": "16",
+                },
             ),
         )
         for inputs, expected in valid:
@@ -91,37 +103,37 @@ class PublishedSdkProfile(unittest.TestCase):
         invalid = (
             ({"BUMP": ""}, "main release requires bump"),
             ({"BUMP": "wat"}, "main release requires bump"),
-            ({"BUMP": "patch", "TAG": "v0.4.2"}, "only valid in reviewed-epic mode"),
+            ({"BUMP": "patch", "TAG": current_tag}, "only valid in reviewed-epic mode"),
             (
-                {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "GITHUB_REF": epic_ref},
+                {"RELEASE_MODE": "reviewed-epic", "TAG": current_tag, "VERSION": CURRENT_VERSION, "GITHUB_REF": epic_ref},
                 "reviewed-pr must be a positive canonical PR number",
             ),
             (
-                {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "0", "GITHUB_REF": epic_ref},
+                {"RELEASE_MODE": "reviewed-epic", "TAG": current_tag, "VERSION": CURRENT_VERSION, "REVIEWED_PR": "0", "GITHUB_REF": epic_ref},
                 "reviewed-pr must be a positive canonical PR number",
             ),
             (
-                {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "016", "GITHUB_REF": epic_ref},
+                {"RELEASE_MODE": "reviewed-epic", "TAG": current_tag, "VERSION": CURRENT_VERSION, "REVIEWED_PR": "016", "GITHUB_REF": epic_ref},
                 "reviewed-pr must be a positive canonical PR number",
             ),
             (
-                {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.3", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_REF": epic_ref},
+                {"RELEASE_MODE": "reviewed-epic", "TAG": next_patch_tag, "VERSION": CURRENT_VERSION, "REVIEWED_PR": "16", "GITHUB_REF": epic_ref},
                 "reviewed-epic tag and version must match",
             ),
             (
-                {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_EVENT_NAME": "push", "GITHUB_REF": epic_ref},
+                {"RELEASE_MODE": "reviewed-epic", "TAG": current_tag, "VERSION": CURRENT_VERSION, "REVIEWED_PR": "16", "GITHUB_EVENT_NAME": "push", "GITHUB_REF": epic_ref},
                 "releases must be manually dispatched",
             ),
             (
-                {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_REF": "refs/heads/main"},
+                {"RELEASE_MODE": "reviewed-epic", "TAG": current_tag, "VERSION": CURRENT_VERSION, "REVIEWED_PR": "16", "GITHUB_REF": "refs/heads/main"},
                 "reviewed-epic releases must be dispatched from epic/8056-modules-wiring",
             ),
             (
-                {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_REF": "refs/heads/feature"},
+                {"RELEASE_MODE": "reviewed-epic", "TAG": current_tag, "VERSION": CURRENT_VERSION, "REVIEWED_PR": "16", "GITHUB_REF": "refs/heads/feature"},
                 "reviewed-epic releases must be dispatched from epic/8056-modules-wiring",
             ),
             (
-                {"RELEASE_MODE": "reviewed-epic", "TAG": "v0.4.2", "VERSION": "0.4.2", "REVIEWED_PR": "16", "GITHUB_REF": "refs/tags/v0.4.2"},
+                {"RELEASE_MODE": "reviewed-epic", "TAG": current_tag, "VERSION": CURRENT_VERSION, "REVIEWED_PR": "16", "GITHUB_REF": f"refs/tags/{current_tag}"},
                 "reviewed-epic releases must be dispatched from epic/8056-modules-wiring",
             ),
             (
@@ -147,8 +159,14 @@ class PublishedSdkProfile(unittest.TestCase):
         self.assertIn("refs/heads/epic/8056-modules-wiring", release)
         self.assertIn("ref: ${{ github.sha }}", release)
         self.assertIn("github.event_name == 'workflow_dispatch'", release)
-        self.assertIn("github.ref == 'refs/heads/main' && needs.resolve.outputs.mode == 'main'", release)
-        self.assertIn("github.ref == 'refs/heads/epic/8056-modules-wiring' && needs.resolve.outputs.mode == 'reviewed-epic'", release)
+        self.assertIn(
+            "github.ref == 'refs/heads/main' && needs.resolve.outputs.mode == 'main'",
+            release,
+        )
+        self.assertIn(
+            "github.ref == 'refs/heads/epic/8056-modules-wiring' && needs.resolve.outputs.mode == 'reviewed-epic'",
+            release,
+        )
 
     def test_git_bash_selection_ignores_poisoned_bare_bash_path(self):
         with tempfile.TemporaryDirectory(prefix="bash-selection-") as scratch:
@@ -221,9 +239,9 @@ class PublishedSdkProfile(unittest.TestCase):
         runner = manifest("proof-workspaces/remix-markers/runner/Cargo.toml")[
             "dependencies"
         ]
-        self.assertEqual(client_bus["version"], "0.4.2")
-        self.assertEqual(runner["tinymemes-bus"]["version"], "0.4.2")
-        self.assertEqual(runner["tinymemes-client"]["version"], "0.4.2")
+        self.assertEqual(client_bus["version"], CURRENT_VERSION)
+        self.assertEqual(runner["tinymemes-bus"]["version"], CURRENT_VERSION)
+        self.assertEqual(runner["tinymemes-client"]["version"], CURRENT_VERSION)
 
     def test_private_marker_runner_declares_repository_license(self):
         runner = manifest("proof-workspaces/remix-markers/runner/Cargo.toml")
@@ -326,7 +344,7 @@ class PublishedSdkProfile(unittest.TestCase):
             "crates/tinymemes-module/Cargo.toml",
         ):
             with self.subTest(manifest=relative_path):
-                self.assertEqual(manifest(relative_path)["package"]["version"], "0.4.2")
+                self.assertEqual(manifest(relative_path)["package"]["version"], CURRENT_VERSION)
 
     def test_obsolete_tinybus_replacements_are_gone(self):
         for relative_path in ("Cargo.toml", "proof-workspaces/remix-markers/Cargo.toml"):
@@ -375,6 +393,73 @@ class PublishedSdkProfile(unittest.TestCase):
             with self.subTest(staged=relative_path):
                 self.assertIn(relative_path, release_commit_inputs)
 
+    def test_release_checksum_tool_uses_admitted_tinybus_revision(self):
+        release = (ROOT / ".github/workflows/release.yml").read_text()
+        tool_step = release.split("      - name: Check out the TinyBus tooling\n", 1)[1].split(
+            "\n      - name:", 1
+        )[0]
+        self.assertIn(
+            "git clone --no-checkout https://github.com/tinyhumansai/tinybus.git vendor-tinybus",
+            tool_step,
+        )
+        self.assertIn(f"TINYBUS_TOOL_REV: {SDK_REV}", tool_step)
+        self.assertIn(
+            'git -C vendor-tinybus fetch --no-tags origin "$TINYBUS_TOOL_REV"',
+            tool_step,
+        )
+        self.assertIn(
+            'git -C vendor-tinybus checkout --detach "$TINYBUS_TOOL_REV"',
+            tool_step,
+        )
+        self.assertIn(
+            'test "$(git -C vendor-tinybus rev-parse HEAD)" = "$TINYBUS_TOOL_REV"',
+            tool_step,
+        )
+        self.assertNotIn("5256d08c41df5852ac1ccfcb58d4b24282b53cd7", release)
+
+    def test_release_checksum_selector_uses_only_the_archive_table(self):
+        release = (ROOT / ".github/workflows/release.yml").read_text()
+        marker = 'python3 - "$archive" release-assets/checksum.toml <<\'PY\'\n'
+        self.assertIn(marker, release)
+        source_start = release.index(marker) + len(marker)
+        source_end = release.index("\n          PY", source_start)
+        selector = textwrap.dedent(release[source_start:source_end])
+
+        archive = "tinymemes-module-0.4.3-ubuntu-24.04-x86_64.tar.gz"
+        # These are the published v0.4.3 archive and embedded library digests.
+        archive_digest = "0c5ec7bfb3dca6c3d5002ca19418de6cce035ca69fb2c21814d376d3d8c09835"
+        library_digest = "485c82f235a5eab19a766aa2f96b267a47ee4229d4c812a7758e99006906246b"
+        (ROOT / "target").mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            prefix="release-checksum-selection-", dir=ROOT / "target"
+        ) as scratch:
+            checksum = Path(scratch) / "checksum.toml"
+            checksum.write_text(
+                f'[sha256]\n"{archive}" = "{archive_digest}"\n\n'
+                f'[library_sha256]\n"{archive}" = "{library_digest}"\n'
+            )
+            result = subprocess.run(
+                [sys.executable, "-c", selector, archive, str(checksum)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, f"{archive_digest}\n")
+            self.assertNotEqual(result.stdout.strip(), library_digest)
+
+            checksum.write_text(
+                f'[library_sha256]\n"{archive}" = "{library_digest}"\n'
+            )
+            missing_archive = subprocess.run(
+                [sys.executable, "-c", selector, archive, str(checksum)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(missing_archive.returncode, 0)
+            self.assertEqual(missing_archive.stdout, "")
+
     def test_release_lock_refreshes_are_network_capable(self):
         release = (ROOT / ".github/workflows/release.yml").read_text()
         update_step = release.split("      - name: Update crate version\n", 1)[1].split(
@@ -408,7 +493,8 @@ class PublishedSdkProfile(unittest.TestCase):
                 "dependencies": ["tinymemes-bus", "tinymemes-client"],
             },
         }
-        versions = ("0.4.3", "0.5.0", "1.0.0")
+        major, minor, patch = map(int, CURRENT_VERSION.split("."))
+        versions = (f"{major}.{minor}.{patch + 1}", f"{major}.{minor + 1}.0", f"{major + 1}.0.0")
         (ROOT / "target").mkdir(exist_ok=True)
         for next_version in versions:
             with self.subTest(next_version=next_version):
