@@ -375,6 +375,25 @@ class PublishedSdkProfile(unittest.TestCase):
             with self.subTest(staged=relative_path):
                 self.assertIn(relative_path, release_commit_inputs)
 
+    def test_release_lock_refreshes_are_network_capable(self):
+        release = (ROOT / ".github/workflows/release.yml").read_text()
+        update_step = release.split("      - name: Update crate version\n", 1)[1].split(
+            "\n      - name:", 1
+        )[0]
+        normalized = " ".join(update_step.replace("\\\n", " ").split())
+        self.assertEqual(normalized.count("cargo update"), 3)
+        self.assertEqual(normalized.count("--workspace"), 3)
+        self.assertIn("cargo update --workspace", normalized)
+        self.assertIn(
+            "cargo update --manifest-path proof-workspaces/remix-markers/Cargo.toml --workspace",
+            normalized,
+        )
+        self.assertIn(
+            "cargo update --manifest-path proof-workspaces/bus-contract/Cargo.toml --workspace",
+            normalized,
+        )
+        self.assertNotIn("--offline", update_step)
+
     def test_release_version_bump_updates_only_package_and_local_path_versions(self):
         copied_manifests = {
             "Cargo.toml": {"package": True, "dependencies": ["tinymemes-bus"]},
