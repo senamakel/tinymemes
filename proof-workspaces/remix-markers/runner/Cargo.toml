@@ -7,8 +7,8 @@ publish = false
 license = "GPL-3.0-only"
 
 [dependencies]
-tinymemes-bus = { version = "0.4.2", path = "../../../crates/tinymemes-bus" }
-tinymemes-client = { version = "0.4.2", path = "../../../crates/tinymemes-client", features = ["host-callback"] }
+tinymemes-bus = { version = "0.4.3", path = "../../../crates/tinymemes-bus" }
+tinymemes-client = { version = "0.4.3", path = "../../../crates/tinymemes-client", features = ["host-callback"] }
 tinybus = { version = "=0.3.11", git = "https://github.com/tinyhumansai/tinybus", rev = "9e14f65666b11782ec1054aba576114026d180f8", default-features = false, features = ["modules"] }
 tinystoragedrivers-bus = { version = "1.9.0", git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "a04e3a174fa8f28d5229a816ca6b39c72a9efd7b" }
 tinystoragedrivers-core = { version = "1.9.0", git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "a04e3a174fa8f28d5229a816ca6b39c72a9efd7b" }
