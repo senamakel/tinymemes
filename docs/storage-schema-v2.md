@@ -5,16 +5,19 @@
 core, no I/O). A host composes it with
 `Registry::compose`, and the module's storage grant is generated from its items.
 
-The storage ports pin `tinystoragedrivers` v1.6.0. Its published schema types,
-composition, migration runner, and schema conformance sources are unchanged
-from v1.0.0. The v1.6 core's in-memory native-watch changes are behind its
-off-by-default `test-util` feature; `tinymemes-bus/storage` enables only the
-ports-only core with default features disabled. The bus adds storage-needs
+The storage ports pin `tinystoragedrivers` v1.9.0. TinyMemes continues to
+export its local schema and migration step through the retained `Schema`,
+`Registry::compose`, and `Registry::migrate` APIs. TSD 1.9 also adds metadata
+and migration delivery for externally declared schemas; TinyMemes does not use
+that delivery path. The v1.9 core's in-memory native-watch changes are behind
+its off-by-default `test-util` feature; `tinymemes-bus/storage` enables only
+the ports-only core with default features disabled. The bus adds storage-needs
 declarations, while its legacy `DocumentClient` remains available behind the
-explicit `client` feature. The module enables that client explicitly. Its
-standalone manifest pins TinyBus v0.3.3 at the canonical Git revision, without
-a local path patch; a host workspace may apply its own root patch to unify the
-SDK with an additive TinyBus release.
+explicit `client` feature. The module enables that client explicitly. TinyMemes
+pins TinyBus v0.3.11 at the canonical Git revision. The root and remix-marker
+proof workspaces patch the canonical TinyBus source to the same exact commit
+on `senamakel/tinybus`, so TinyBus 0.3.11 and TSD 1.9's 0.3.10-compatible edge
+resolve to one Cargo package identity.
 
 | v1 | v2 | Scope class | Change |
 |---|---|---|---|
@@ -41,5 +44,5 @@ port, whose collection the host chooses; it already has the snake_case,
 object-only shape and needs no step.
 
 The migration tests cover schema declaration, conversion, malformed input,
-idempotence, original creation times, and expiry metadata across the v1.6.0
+idempotence, original creation times, and expiry metadata across the v1.9.0
 port implementation.

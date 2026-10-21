@@ -165,14 +165,10 @@ jobs:
 
       - name: Update crate version
         env:
-          CRATE_NAME: ${{ steps.version.outputs.crate_name }}
           NEXT_VERSION: ${{ steps.version.outputs.next_version }}
         run: |
           set -euo pipefail
-          perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' Cargo.toml
-          perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' crates/tinymemes-module/Cargo.toml
-          perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' crates/tinymemes-bus/Cargo.toml
-          perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' crates/tinymemes-client/Cargo.toml
+          bash scripts/update-release-versions.sh "$PWD" "$NEXT_VERSION"
           cargo update --workspace --offline
           # The proof workspaces depend on the bumped contract by path; keep
           # their locks in step so `--locked` runs after release still resolve.
@@ -190,6 +186,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Cargo.toml Cargo.lock crates/tinymemes-module/Cargo.toml \
             crates/tinymemes-bus/Cargo.toml crates/tinymemes-client/Cargo.toml \
+            proof-workspaces/remix-markers/runner/Cargo.toml \
             proof-workspaces/remix-markers/Cargo.lock proof-workspaces/bus-contract/Cargo.lock
           git commit -m "Release ${RELEASE_TAG}"
           git tag -a "${RELEASE_TAG}" -m "Release ${RELEASE_TAG}"

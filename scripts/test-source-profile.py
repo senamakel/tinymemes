@@ -15,8 +15,8 @@ from test_support import bash_command, bash_diagnostic, git_bash_executable, run
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SDK_REV = "207a9a7df15e44fdba00a807d0f7eaf21904ba0e"
-TSD_TAG = "v1.6.0"
+SDK_REV = "9e14f65666b11782ec1054aba576114026d180f8"
+TSD_REV = "a04e3a174fa8f28d5229a816ca6b39c72a9efd7b"
 CI_PIN = "4adc1080fb495098e7af1aade82ed7e6e3c69bb7"
 RELEASE_PIN = "6ed83b04aab2d8977ec62e966cb914531e534fa4"
 
@@ -203,7 +203,7 @@ class PublishedSdkProfile(unittest.TestCase):
                             self.assertIn("git", dependency)
                             self.assertNotIn("path", dependency)
                             self.assertEqual(dependency["rev"], SDK_REV)
-                            self.assertEqual(dependency["version"], ">=0.3.3, <0.4.0")
+                            self.assertEqual(dependency["version"], "=0.3.11")
 
     def test_nested_gitlink_matches_the_published_sdk_revision(self):
         rev = subprocess.run(
@@ -214,11 +214,80 @@ class PublishedSdkProfile(unittest.TestCase):
         ).stdout.strip()
         self.assertEqual(rev, SDK_REV)
 
+    def test_cross_workspace_local_dependencies_keep_exact_versions(self):
+        client_bus = manifest("crates/tinymemes-client/Cargo.toml")["dependencies"][
+            "tinymemes-bus"
+        ]
+        runner = manifest("proof-workspaces/remix-markers/runner/Cargo.toml")[
+            "dependencies"
+        ]
+        self.assertEqual(client_bus["version"], "0.4.2")
+        self.assertEqual(runner["tinymemes-bus"]["version"], "0.4.2")
+        self.assertEqual(runner["tinymemes-client"]["version"], "0.4.2")
+
+    def test_private_marker_runner_declares_repository_license(self):
+        runner = manifest("proof-workspaces/remix-markers/runner/Cargo.toml")
+        self.assertFalse(runner["package"]["publish"])
+        self.assertEqual(runner["package"]["license"], "GPL-3.0-only")
+
+    def test_sdk_patch_source_is_explicitly_allowlisted(self):
+        policy = tomllib.loads((ROOT / "deny.toml").read_text())
+        self.assertEqual(policy["sources"]["unknown-git"], "deny")
+        self.assertIn(
+            "https://github.com/senamakel/tinybus",
+            policy["sources"]["allow-git"],
+        )
+
+    def test_standalone_tsd_graph_uses_the_same_tinybus_gitlink(self):
+        self.assertIn("vendor/tinybus", manifest("Cargo.toml")["workspace"]["exclude"])
+        for relative_root, lock_path in (
+            ("Cargo.toml", "Cargo.lock"),
+            (
+                "proof-workspaces/remix-markers/Cargo.toml",
+                "proof-workspaces/remix-markers/Cargo.lock",
+            ),
+        ):
+            with self.subTest(root=relative_root):
+                patch = manifest(relative_root)["patch"][
+                    "https://github.com/tinyhumansai/tinybus"
+                ]
+                self.assertEqual(
+                    patch,
+                    {
+                        "tinybus": {
+                            "version": "=0.3.11",
+                            "git": "https://github.com/senamakel/tinybus",
+                            "rev": SDK_REV,
+                        },
+                        "tinybus-module": {
+                            "version": "=0.3.11",
+                            "git": "https://github.com/senamakel/tinybus",
+                            "rev": SDK_REV,
+                        },
+                    },
+                )
+                lock = tomllib.loads((ROOT / lock_path).read_text())
+                packages = [
+                    package
+                    for package in lock["package"]
+                    if package["name"] in {"tinybus", "tinybus-module"}
+                ]
+                self.assertEqual(len(packages), 2)
+                self.assertEqual({package["version"] for package in packages}, {"0.3.11"})
+                self.assertEqual(
+                    {package["source"] for package in packages},
+                    {
+                        f"git+https://github.com/senamakel/tinybus?rev={SDK_REV}#{SDK_REV}"
+                    },
+                )
+
     def test_storage_client_keeps_an_explicit_compatible_sdk_edge(self):
         dependency = manifest("crates/tinymemes-module/Cargo.toml")["dependencies"][
             "tinystoragedrivers-bus"
         ]
-        self.assertEqual(dependency["tag"], TSD_TAG)
+        self.assertEqual(dependency["version"], "1.9.0")
+        self.assertEqual(dependency["rev"], TSD_REV)
+        self.assertNotIn("tag", dependency)
         self.assertFalse(dependency.get("default-features", True))
         self.assertIn("client", dependency.get("features", []))
 
@@ -234,14 +303,18 @@ class PublishedSdkProfile(unittest.TestCase):
                 for name, dependency in cargo.get(section, {}).items():
                     if name.startswith("tinystoragedrivers-"):
                         with self.subTest(manifest=relative_path, name=name, section=section):
-                            self.assertEqual(dependency.get("tag"), TSD_TAG)
+                            self.assertEqual(dependency.get("version"), "1.9.0")
+                            self.assertEqual(dependency.get("rev"), TSD_REV)
+                            self.assertNotIn("tag", dependency)
 
     def test_contract_storage_schema_stays_opt_in_and_ports_only(self):
         cargo = manifest("crates/tinymemes-bus/Cargo.toml")
         self.assertEqual(cargo["features"]["default"], [])
         self.assertIn("storage", cargo["features"])
         dependency = cargo["dependencies"]["tinystoragedrivers-core"]
-        self.assertEqual(dependency["tag"], TSD_TAG)
+        self.assertEqual(dependency["version"], "1.9.0")
+        self.assertEqual(dependency["rev"], TSD_REV)
+        self.assertNotIn("tag", dependency)
         self.assertFalse(dependency.get("default-features", True))
         self.assertTrue(dependency["optional"])
 
@@ -285,6 +358,73 @@ class PublishedSdkProfile(unittest.TestCase):
         self.assertIn("needs.resolve.outputs.mode == 'reviewed-epic'", release)
         self.assertIn("needs.resolve.outputs.mode == 'main'", release)
         self.assertIn("run: scripts/resolve-release-mode.sh", release)
+        self.assertIn('bash scripts/update-release-versions.sh "$PWD" "$NEXT_VERSION"', release)
+        release_commit_inputs = release.split("          git add ", 1)[1].split(
+            "\n          git commit", 1
+        )[0]
+        for relative_path in (
+            "Cargo.toml",
+            "Cargo.lock",
+            "crates/tinymemes-module/Cargo.toml",
+            "crates/tinymemes-bus/Cargo.toml",
+            "crates/tinymemes-client/Cargo.toml",
+            "proof-workspaces/remix-markers/runner/Cargo.toml",
+            "proof-workspaces/remix-markers/Cargo.lock",
+            "proof-workspaces/bus-contract/Cargo.lock",
+        ):
+            with self.subTest(staged=relative_path):
+                self.assertIn(relative_path, release_commit_inputs)
+
+    def test_release_version_bump_updates_only_package_and_local_path_versions(self):
+        copied_manifests = {
+            "Cargo.toml": {"package": True, "dependencies": ["tinymemes-bus"]},
+            "crates/tinymemes-module/Cargo.toml": {"package": True},
+            "crates/tinymemes-bus/Cargo.toml": {"package": True},
+            "crates/tinymemes-client/Cargo.toml": {
+                "package": True,
+                "dependencies": ["tinymemes-bus"],
+            },
+            "proof-workspaces/remix-markers/runner/Cargo.toml": {
+                "package": False,
+                "dependencies": ["tinymemes-bus", "tinymemes-client"],
+            },
+        }
+        versions = ("0.4.3", "0.5.0", "1.0.0")
+        (ROOT / "target").mkdir(exist_ok=True)
+        for next_version in versions:
+            with self.subTest(next_version=next_version):
+                with tempfile.TemporaryDirectory(
+                    prefix="release-version-bump-", dir=ROOT / "target"
+                ) as scratch:
+                    scratch_root = Path(scratch)
+                    before = {}
+                    for relative_path in copied_manifests:
+                        destination = scratch_root / relative_path
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(ROOT / relative_path, destination)
+                        before[relative_path] = tomllib.loads(destination.read_text())
+
+                    subprocess.run(
+                        [
+                            "bash",
+                            str(ROOT / "scripts/update-release-versions.sh"),
+                            str(scratch_root),
+                            next_version,
+                        ],
+                        cwd=scratch_root,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+
+                    for relative_path, expected_updates in copied_manifests.items():
+                        after = tomllib.loads((scratch_root / relative_path).read_text())
+                        expected = before[relative_path]
+                        if expected_updates["package"]:
+                            expected["package"]["version"] = next_version
+                        for dependency in expected_updates.get("dependencies", []):
+                            expected["dependencies"][dependency]["version"] = next_version
+                        self.assertEqual(after, expected, relative_path)
 
     def test_reviewed_release_caller_matches_pinned_reusable_input_types(self):
         actionlint = shutil.which("actionlint")
