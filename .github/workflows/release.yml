@@ -169,13 +169,13 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/update-release-versions.sh "$PWD" "$NEXT_VERSION"
-          cargo update --workspace --offline
+          cargo update --workspace
           # The proof workspaces depend on the bumped contract by path; keep
           # their locks in step so `--locked` runs after release still resolve.
           cargo update --manifest-path proof-workspaces/remix-markers/Cargo.toml \
-            -p tinymemes-bus -p tinymemes-client
+            --workspace
           cargo update --manifest-path proof-workspaces/bus-contract/Cargo.toml \
-            -p tinymemes-bus --offline
+            --workspace
 
       - name: Commit version bump and tag
         env:
