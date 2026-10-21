@@ -353,10 +353,14 @@ jobs:
 
       - name: Check out the TinyBus tooling
         shell: bash
+        env:
+          TINYBUS_TOOL_REV: 9e14f65666b11782ec1054aba576114026d180f8
         run: |
           set -euo pipefail
-          git clone https://github.com/tinyhumansai/tinybus vendor-tinybus
-          git -C vendor-tinybus checkout 5256d08c41df5852ac1ccfcb58d4b24282b53cd7
+          git clone --no-checkout https://github.com/tinyhumansai/tinybus.git vendor-tinybus
+          git -C vendor-tinybus fetch --no-tags origin "$TINYBUS_TOOL_REV"
+          git -C vendor-tinybus checkout --detach "$TINYBUS_TOOL_REV"
+          test "$(git -C vendor-tinybus rev-parse HEAD)" = "$TINYBUS_TOOL_REV"
 
       - name: Create release checksum manifest with TinyBus
         shell: bash
@@ -404,8 +408,23 @@ jobs:
           set -euo pipefail
           archive="tinymemes-module-${VERSION}-ubuntu-24.04-x86_64.tar.gz"
           release_url="https://github.com/${REPOSITORY}/releases/tag/${RELEASE_TAG}"
-          sha256="$(sed -n "s/^\"${archive}\" = \"\([0-9a-f]\{64\}\)\"$/\1/p" release-assets/checksum.toml)"
-          test -n "$sha256"
+          sha256="$(python3 - "$archive" release-assets/checksum.toml <<'PY'
+          import re
+          import sys
+          import tomllib
+
+          archive, checksum_path = sys.argv[1:]
+          with open(checksum_path, "rb") as checksum_file:
+              manifest = tomllib.load(checksum_file)
+
+          archive_sha256 = manifest.get("sha256", {}).get(archive)
+          if not isinstance(archive_sha256, str) or re.fullmatch(
+              r"[0-9a-f]{64}", archive_sha256
+          ) is None:
+              raise SystemExit(f"archive checksum missing or invalid for {archive}")
+          print(archive_sha256)
+          PY
+          )"
           cargo run --manifest-path vendor-tinybus/Cargo.toml --locked \
             --package tinybus --all-features --example github_module_host -- \
             "$release_url" "$archive" "$sha256"
